@@ -48,6 +48,7 @@ RUN mkdir /src
 RUN conda install -c bioconda samtools
 
 #update tools useful for development
+RUN apt-get update -y
 RUN apt-get install -y emacs tmux
 
 #custom scripts
