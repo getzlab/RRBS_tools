@@ -52,5 +52,8 @@ RUN apt-get update -y
 RUN apt-get install -y emacs tmux
 
 #custom scripts
-COPY WGBS_Workflow_01_PE_AD.sh WGBS_Workflow_01_SR.sh bamStat.pl /src/
+COPY WGBS_Workflow_01_PE_AD.sh WGBS_Workflow_01_SR.sh *.pl /src/
 RUN chmod +x /src/*
+
+#install bedToBigBed
+RUN conda install -c bioconda ucsc-bedtobigbed
