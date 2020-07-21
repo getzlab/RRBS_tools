@@ -347,7 +347,7 @@ bam_file=${SAMPLE}_${GENOME}.bsmap.srt.bam
 seed_size=16 # default=16(WGBS mode), 12(RRBS mode). min=8, max=16
 max_ins=1000 # max insert size for PE mapping (-x)
 
-#echo bsmap  -v 0.1 -s $seed_size -q 20 -w 100 -S 1 -u -R -x $max_ins -p $(($C_THREADS-$p_threads)) -d ${genome_index} -a $FQ1  -b $FQ2 samtools sort -m 8G --threads $p_threads --output-fmt BAM -o $bam_file -
+echo bsmap  -v 0.1 -s $seed_size -q 20 -w 100 -S 1 -u -R -x $max_ins -p $(($C_THREADS-$p_threads)) -d ${genome_index} -a $FQ1  -b $FQ2 samtools sort -m 8G --threads $p_threads --output-fmt BAM -o $bam_file -
 
 #adunford need to make this modular
 mem_gigs=2
