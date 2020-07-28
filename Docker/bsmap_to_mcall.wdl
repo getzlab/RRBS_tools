@@ -1,40 +1,45 @@
 task bsmap_to_mcall{
 
-	#FQ1       : first fastq file of a pair
-	File fastq1
-	#FQ2       : second fastq file of a pair
-	File fastq2
-	#SAMPLE    : sample name, used for output naming
-	String sample_id
-	#GENOME    : either 'mm9'/'mm10' (mouse) or 'hg19'/'hg38' (human).
-	String genome_reference
-	#C_THREADS : computing(alignment) threads to use.
-	Int threads
-	#n         : special flag for 2-color devices NextSeq and NovaSeq.
-	#a         : perform not only CpG, but additionally CpA,C,T calling
-	#o         : overlap-based clipping using bamutils (experimental)
+    #FQ1       : first fastq file of a pair
+    File fastq1
+    #FQ2       : second fastq file of a pair
+    File fastq2
+    #SAMPLE    : sample name, used for output naming
+    String sample_id
+    #GENOME    : either 'mm9'/'mm10' (mouse) or 'hg19'/'hg38' (human).
+    String genome_reference
+    File reference_fa
+    File reference_sizes
+    #C_THREADS : computing(alignment) threads to use.
+    Int threads
+    Int seed_size #seed size, default=16(WGBS mode), 12(RRBS mode). min=8, max=16.
+    #n         : special flag for 2-color devices NextSeq and NovaSeq.
+    #a         : perform not only CpG, but additionally CpA,C,T calling
+    #o         : overlap-based clipping using bamutils (experimental)
+    String docker_tag
+    Int disk_size
+    Int mem_size
+    Int preemtible
 
-  	Int disk_size
-  	Int mem_size
 
+    command <<<
+    	    /src/WGBS_Workflow_01_PE_AD.sh -1 ${fastq1} -2 ${fastq2} -s ${sample_id} -g ${genome_reference} -r ${reference_fa} -z ${reference_sizes}  -c ${threads} -q ${seed_size}
+ 	    >>>
 
-  	command <<<
-		sh /src/WGBS_Workflow_01_PE.sh
- 	>>>
-
-  	runtime {
-    	docker: "adunford/bsmap_to_mcall:0.1"
-    	memory: mem_size
-    	disks: "local-disk " + disk_size + " HDD"
-    	preemptible: 3
-	}
-  	output {
-    	File MAF_Logs_tonly = "${case_name}.GermSomLogodds.maf"
-    	File MAF_Pass_muts_tonly = "${case_name}.GermSomLogodds.pass.maf"
-    	File Seg_file_Pass_tonly = "${case_name}.GermSomLogodds.seg.txt"
-  	}
+    runtime {
+    	    docker: "adunford/bsmap_to_mcall:" + docker_tag
+    	    memory: mem_size
+            CPU: threads +1
+    	    disks: "local-disk " + disk_size + " HDD"
+    	    preemptible: preemtible
+    }
+    output {
+	    File bsmap_align_stats = "${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.bam.stats.txt"
+	    File bsmap_dedup_align_stats = ${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.rd.bam.stats.txt"
+	    File dedupped_bsmap_bam = ${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.rd.bam"
+    }
 }
 
-workflow tonly_pipeline {
-  	call bsmap_to_mcall_PE
+workflow bsmap_to_mcall_PE {
+  	 call bsmap_to_mcall
 }
