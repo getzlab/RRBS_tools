@@ -1,4 +1,4 @@
-#!/opt/miniconda/bin/perl
+#!/opt/conda/bin/perl
   
 use strict;
 use warnings;

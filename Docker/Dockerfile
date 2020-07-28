@@ -20,42 +20,43 @@ RUN conda config --add channels conda-forge
 #RUN conda install -c bioconda gatk4
 
 #bsmap, gatk5, fastqc, multiqc and other stuff I haven't had a reason to install separately with conda
-RUN conda install bsmap gatk4 fastqc  multiqc bamutil cutadapt deeptools  ucsc-bedtobigbed 
+#Specifying gatk 4.1.5 because sometime before 4.1.8 the syntax changes
+RUN conda install bsmap gatk4=4.1.5.0 fastqc  multiqc bamutil cutadapt deeptools  ucsc-bedtobigbed 
 
 
 #mcall
-RUN conda install -c bioconda moabs
-
-#fastqc
-#RUN apt install -y default-jre
-#RUN wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.9.zip
-#RUN unzip fastqc_v0.11.9.zip
-
-#multiqc
-#RUN conda install -c bioconda -c conda-forge multiqc
+RUN conda install -c anaconda boost
+#RUN conda install  moabs
+#RUN wget https://s3.amazonaws.com/deqiangsun/software/moabs-v1.3.0.src.x86_64_Linux.data.tar.gz
+RUN mkdir /src
+WORKDIR /src
+RUN git clone https://github.com/sunnyisgalaxy/moabs.git
+#RUN export PATH=PATH:/src/moabs/bin
+#WORKDIR  moabs
+#RUN apt-get install make
+#RUN make
+#RUN make install 
 
 #Set to POSIX in the script currently being used...
 ENV LC_ALL "POSIX"
 ENV LANG "POSIX"
 
-#bamutils
-#RUN conda install bamutil
-
-#cutadapt
-#RUN conda install -c bioconda cutadapt
-
-#bamCoverage
-#RUN conda install -c bioconda deeptools
 
 
+#install needed perl modules
+RUN conda install -c bioconda perl-statistics-descriptive
 
 
-RUN mkdir /src
-#need to update samtools to later version for whatever reason
-RUN conda install -c bioconda samtools
+#need to update samtools to later version and force install openssl 1.0 to keep libraries neat
+RUN conda install -c bioconda samtools openssl=1.0
+ENV PATH="${PATH}:/src/moabs/bin"
 
+#Need to symlink mysql to older version expected by bedtobigbed... seems to work so far, may need to install older version manually as above with openssl
+RUN ln -s /opt/conda/lib/libmysqlclient.so.20  /opt/conda/lib/libmysqlclient.so.18
 
 #custom scripts
 COPY WGBS_Workflow_01_PE_AD.sh WGBS_Workflow_01_SR.sh *.pl /src/
 RUN chmod +x /src/*
 
+RUN mkdir /workdir
+WORKDIR /workdir

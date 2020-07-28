@@ -43,7 +43,7 @@ if [ $# -eq 0 ]; then
 fi
 
 ## parameters
-while getopts 1:2:i:s:g:c:r:z:nao option
+while getopts 1:2:i:s:g:c:r:q:z:nao option
 do
     case "${option}"
         in
@@ -55,6 +55,7 @@ do
         n) IS_TWO_COLOR_SEQ=1;;
 	r) REFERENCE_FA=${OPTARG};;
 	z) SIZE=${OPTARG};;
+	q) seed_size=${OPTARG};;
         a) DO_ALL=1;;
         o) DO_OBC=1;;
     esac
@@ -237,7 +238,7 @@ export LC_ALL="POSIX"
 ## ----------------------------------------------------------------
 ## (1) Prepare working/results directory
 ## ----------------------------------------------------------------
-results_dir=${working_dir}/wgbs_${SAMPLE}_${GENOME}_PE_${date_flag}
+results_dir=${working_dir}/${SAMPLE}_${GENOME}_PE
 fastqc_results_dir=$results_dir/00_FastQC
 mkdir -p $fastqc_results_dir
 cd $results_dir
@@ -344,9 +345,13 @@ bam_file=${SAMPLE}_${GENOME}.bsmap.srt.bam
 # -u = report unmapped reads, default=off
 # -R = print corresponding reference sequences in SAM output, default=off
 #
-seed_size=16 # default=16(WGBS mode), 12(RRBS mode). min=8, max=16
+#seed_size=16 # default=16(WGBS mode), 12(RRBS mode). min=8, max=16
 max_ins=1000 # max insert size for PE mapping (-x)
 
+if [ -z "$seed_size" ];
+then
+    seed_size=16
+fi
 echo bsmap  -v 0.1 -s $seed_size -q 20 -w 100 -S 1 -u -R -x $max_ins -p $(($C_THREADS-$p_threads)) -d ${genome_index} -a $FQ1  -b $FQ2 samtools sort -m 8G --threads $p_threads --output-fmt BAM -o $bam_file -
 
 #adunford need to make this modular
@@ -412,6 +417,20 @@ bam_dedup=${bam_file%.bam}.rd.bam
 ## due to their patterned flowcells. We will run only few WGBS libs on other machines.
 ## sklages, 2018-11-15
 
+echo gatk \
+     MarkDuplicates \
+     --java-options "-XX:ParallelGCThreads=$C_THREADS -Xmx$mhs_mem -Djava.io.tmpdir=$temp_dir" \
+     --ASSUME_SORT_ORDER=coordinate \
+     --MAX_FILE_HANDLES_FOR_READ_ENDS_MAP=$(($max_open_files/1000*1000)) \
+     --REMOVE_DUPLICATES=true \
+     --MAX_RECORDS_IN_RAM=10000000 \
+     --INPUT=$bam_file \
+     --OUTPUT=$bam_dedup \
+     --METRICS_FILE=${bam_dedup}.dedup-metrics.txt \
+     --TMP_DIR=$temp_dir \
+     --VALIDATION_STRINGENCY=LENIENT \
+       --READ_NAME_REGEX=null
+
 gatk \
   MarkDuplicates \
   --java-options "-XX:ParallelGCThreads=$C_THREADS -Xmx$mhs_mem -Djava.io.tmpdir=$temp_dir" \
@@ -443,6 +462,16 @@ bam_file=$bam_dedup
 print_str "Running Methylation Calling CpG"
 
 prefix=${SAMPLE}_${GENOME}
+
+echo mcall \
+     --threads $C_THREADS \
+     --reference ${genome_index[$GENOME]} \
+     --sampleName $prefix \
+     --mappedFiles $bam_file \
+     --outputDir $results_dir \
+     --webOutputDir $results_dir
+
+
 mcall \
   --threads $C_THREADS \
   --reference ${genome_index[$GENOME]} \
@@ -530,6 +559,8 @@ do
     echo " removing '$item'"
     rm -fr $item
 done
+
+tar -czvf  results.tar.gz  $results_dir
 
 echo ""
 echo "***********************************************************"

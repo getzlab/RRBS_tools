@@ -1,4 +1,4 @@
-#!/opt/miniconda/bin/perl
+#!/opt/conda/bin/perl
 #adunford: I changed the above line to point to the location perl is installed on the docker image for the bsmap-to-mcall workflow
 
 ## INFO : I dropped 'Bio::DB::Sam' approach in favour of 'samtools --threads INT' as this works 
