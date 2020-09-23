@@ -4,7 +4,7 @@
 #namely changing the way it references the reference genome information, which currently is hardcoded as if it is in a static local area
 #and changing the binaries to point to the default path locations installed in the docker instead of the hardcoded areas listed
 
-:<<'WGBS_WORKFLOW'
+:<<'BS_WORKFLOW'
 
   * PE Data only
 
@@ -15,9 +15,9 @@
   ALIGNER: bsmap
   CALLER : mcall
 
-WGBS_WORKFLOW
+BS_WORKFLOW
 
-__VERSION='1.0 - 11/2018'
+__VERSION='1.1 - 11/2020'
 
 ## default values
 C_THREADS=40 # compute threads
@@ -32,18 +32,23 @@ if [ $# -eq 0 ]; then
   echo "FQ1       : first fastq file of a pair"
   echo "FQ2       : second fastq file of a pair"
   echo "SAMPLE    : sample name, used for output naming"
-  echo "GENOME    : either 'mm9'/'mm10' (mouse) or 'hg19'/'hg38' (human)."
+  echo "GENOME    : e.g. 'mm9'/'mm10' (mouse) or 'hg19'/'hg38' (human)."
   echo "C_THREADS : computing(alignment) threads to use."
+  echo "m         : total memory (gigs) "   
   echo "n         : special flag for 2-color devices NextSeq and NovaSeq."
   echo "a         : perform not only CpG, but additionally CpA,C,T calling"
   echo "o         : overlap-based clipping using bamutils (experimental)"
+  echo "r         : Reference FASTA (Must not be compressed)"
+  echo "q         : seed_size, 12 for RRBS, 16 WGBS"
+  echo "x         : cut adaptors" 
+  echo "z         : chromosome sizes file"
   echo ""
   echo " Version : $__VERSION"
   exit
 fi
 
 ## parameters
-while getopts 1:2:i:s:g:c:r:q:z:nao option
+while getopts 1:2:i:s:g:c:r:q:z:m:naox option
 do
     case "${option}"
         in
@@ -52,12 +57,14 @@ do
         s) SAMPLE=${OPTARG};;
         g) GENOME=${OPTARG};;
         c) C_THREADS=${OPTARG};;
+	m) mem_gigs=${OPTARG};;
         n) IS_TWO_COLOR_SEQ=1;;
 	r) REFERENCE_FA=${OPTARG};;
 	z) SIZE=${OPTARG};;
 	q) seed_size=${OPTARG};;
         a) DO_ALL=1;;
         o) DO_OBC=1;;
+	x) CUTADAPT=1;; 
     esac
 done
 
@@ -255,83 +262,84 @@ fastqc \
   --dir $fastqc_results_dir \
   $FQ1 $FQ2
 
+if [ $CUTADAPT  ]; then 
+    echo "[INFO] Applying Adaptor and Quality Trimming to Input Data"
+    
+    ## ----------------------------------------------------------------
+    ## (3) Adaptor and Quality Trimming
+    ## ----------------------------------------------------------------
+    print_str "Running cutadapt - Trimming Illumina adaptors and Quality"
 
-echo "[INFO] Applying Adaptor and Quality Trimming to Input Data"
+    min_length=25
+    min_qual=20
+    swift_trim_off=10
+    
+    # output names, no absolute paths necessary
+    fq1_trimmed=${SAMPLE}_R1.trm.fq.gz
+    fq2_trimmed=${SAMPLE}_R2.trm.fq.gz
 
-## ----------------------------------------------------------------
-## (3) Adaptor and Quality Trimming
-## ----------------------------------------------------------------
-print_str "Running cutadapt - Trimming Illumina adaptors and Quality"
+    # If data has been generated on NextSeq or NovaSeq 2-color machines,
+    # we need to apply a different type of quality clipping (due to dark cycles)
+    trimming_type='--quality-cutoff'
+    if [ $IS_TWO_COLOR_SEQ ] ; then
+	echo "[INFO] Applying 2-color-device trimming mode"
+	trimming_type='--nextseq-trim'
+    fi
 
-min_length=25
-min_qual=20
-swift_trim_off=10
+    ## R1----->
+    ## ~~~~~~~|=======================|~~~~~~~
+    ##   AD   |        DNA            |   AD
+    ## ~~~~~~~|=======================|~~~~~~~
+    ##                                <-----R2
+    echo User specified to cut adaptor sequences
+    echo current adaptor sequences: ${adaptors[illumina]}
+    # quality clipping is done BEFORE adaptor clipping
+    cutadapt \
+	$trimming_type $min_qual \
+	--overlap 5 \
+	--minimum-length $(($min_length+2*$swift_trim_off)) \
+	--cores $(($C_THREADS/2)) \
+	--adapter ${adaptors[illumina]} \
+	-A ${adaptors[illumina]} \
+	--interleaved \
+	$FQ1 \
+	$FQ2 \
+	2>.log_a | \
+    cutadapt \
+        --interleaved \
+	--minimum-length $min_length \
+	--cores $(($C_THREADS/2)) \
+	--cut $swift_trim_off \
+	--cut -$swift_trim_off \
+	-U $swift_trim_off -U -$swift_trim_off \
+	--output $fq1_trimmed \
+	--paired-output $fq2_trimmed \
+	- \
+    &>.log_b
 
-# output names, no absolute paths necessary
-fq1_trimmed=${SAMPLE}_R1.trm.fq.gz
-fq2_trimmed=${SAMPLE}_R2.trm.fq.gz
+    ## merge log output
+    cat .log_a .log_b > ${SAMPLE}_FastQ-Trimming-Adp.log
+    
+    bio_muelltonne+=($fq1_trimmed $fq2_trimmed .log_a .log_b)
 
-# If data has been generated on NextSeq or NovaSeq 2-color machines,
-# we need to apply a different type of quality clipping (due to dark cycles)
-trimming_type='--quality-cutoff'
-if [ $IS_TWO_COLOR_SEQ ] ; then
-    echo "[INFO] Applying 2-color-device trimming mode"
-    trimming_type='--nextseq-trim'
+
+    ## ----------------------------------------------------------------
+    ## (4) post-QC
+    ## ----------------------------------------------------------------
+    print_str "FastQC : post-QC"
+
+    fastqc \
+	--outdir $fastqc_results_dir \
+	--threads $C_THREADS \
+	--dir $fastqc_results_dir \
+	$fq1_trimmed $fq2_trimmed
+
+    ## finally set FQ1
+    FQ1=$fq1_trimmed
+    FQ2=$fq2_trimmed
+
 fi
 
-## R1----->
-## ~~~~~~~|=======================|~~~~~~~
-##   AD   |        DNA            |   AD
-## ~~~~~~~|=======================|~~~~~~~
-##                                <-----R2
-
-# quality clipping is done BEFORE adaptor clipping
-cutadapt \
-  $trimming_type $min_qual \
-  --overlap 5 \
-  --minimum-length $(($min_length+2*$swift_trim_off)) \
-  --cores $(($C_THREADS/2)) \
-  --adapter ${adaptors[illumina]} \
-  -A ${adaptors[illumina]} \
-  --interleaved \
-  $FQ1 \
-  $FQ2 \
-  2>.log_a | \
-cutadapt \
-  --interleaved \
-  --minimum-length $min_length \
-  --cores $(($C_THREADS/2)) \
-  --cut $swift_trim_off \
-  --cut -$swift_trim_off \
-  -U $swift_trim_off -U -$swift_trim_off \
-  --output $fq1_trimmed \
-  --paired-output $fq2_trimmed \
-  - \
-  &>.log_b
-
-## merge log output
-cat .log_a .log_b > ${SAMPLE}_FastQ-Trimming-Adp.log
-
-bio_muelltonne+=($fq1_trimmed $fq2_trimmed .log_a .log_b)
-
-
-## ----------------------------------------------------------------
-## (4) post-QC
-## ----------------------------------------------------------------
-print_str "FastQC : post-QC"
-
-fastqc \
-  --outdir $fastqc_results_dir \
-  --threads $C_THREADS \
-  --dir $fastqc_results_dir \
-  $fq1_trimmed $fq2_trimmed
-
-## finally set FQ1
-FQ1=$fq1_trimmed
-FQ2=$fq2_trimmed
-
-pwd
-echo $FQ1 $FQ2
 ## ----------------------------------------------------------------
 ## (5) Alignment - bsmap
 ## ----------------------------------------------------------------
@@ -352,10 +360,11 @@ if [ -z "$seed_size" ];
 then
     seed_size=16
 fi
-echo bsmap  -v 0.1 -s $seed_size -q 20 -w 100 -S 1 -u -R -x $max_ins -p $(($C_THREADS-$p_threads)) -d ${genome_index} -a $FQ1  -b $FQ2 samtools sort -m 8G --threads $p_threads --output-fmt BAM -o $bam_file -
+echo total mem: $mem_gigs
+echo mem per samtools thread: $((($mem_gigs-1)/$p_threads))G
+echo bsmap  -v 0.1 -s $seed_size -q 20 -w 100 -S 1 -u -R -x $max_ins -p $(($C_THREADS-$p_threads)) -d ${genome_index} -a $FQ1  -b $FQ2 samtools sort -m $((($mem_gigs-1)/$p_threads))G --threads $p_threads --output-fmt BAM -o $bam_file -
 
-#adunford need to make this modular
-mem_gigs=2
+
 
 bsmap \
   -v 0.1 -s $seed_size -q 20 -w 100 -S 1 -u -R \
@@ -364,7 +373,7 @@ bsmap \
   -d ${genome_index} \
   -a $FQ1 \
   -b $FQ2 \
-  | samtools sort -m ${mem_gigs}G --threads $p_threads --output-fmt BAM -o $bam_file 
+  | samtools sort -m  $((($mem_gigs-1)/$p_threads))G --threads $p_threads --output-fmt BAM -o $bam_file 
 
 print_str "Creating BAM Index for $bam_file"
 samtools index -@ $((2*$p_threads)) $bam_file
@@ -534,7 +543,8 @@ fi
 ## [..] abort further execution because Python 3 was configured to use ASCII as encoding for the environment.
 ## This system lists a couple of UTF-8 supporting locales that you can pick from.
 ## deeptools,multiqc
-export LC_ALL=de_DE.UTF-8
+#adunford: below line threw an error.  Doesn't crash the script but also I don't think this line helps anything
+#export LC_ALL=de_DE.UTF-8
 
 ## ----------------------------------------------------------------
 ## (10) Create MultiQC Report
@@ -560,11 +570,9 @@ do
     rm -fr $item
 done
 
+cd ..
+
 tar -czvf  results.tar.gz  $results_dir
 
-echo ""
-echo "***********************************************************"
-echo "***     Problem:"
-echo "***     https://github.com/marcelm/cutadapt/issues/366"
-echo "***********************************************************"
-echo ""
+echo "PE Bisulfite Pipeline Complete"
+

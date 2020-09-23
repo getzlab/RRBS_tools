@@ -35,8 +35,9 @@ task bsmap_to_mcall{
     }
     output {
 	    File bsmap_align_stats = "${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.bam.stats.txt"
-	    File bsmap_dedup_align_stats = ${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.rd.bam.stats.txt"
-	    File dedupped_bsmap_bam = ${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.rd.bam"
+	    File bsmap_dedup_align_stats = "${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.rd.bam.stats.txt"
+	    File dedupped_bsmap_bam = "${sample_id}_PE_${genome_reference}/${sample_id}_PE_${genome_reference}.bsmap.srt.rd.bam"
+	    File bsmap_to_mcall_results_tar = "results.tar.gz"
     }
 }
 
