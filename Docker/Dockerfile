@@ -55,7 +55,7 @@ ENV PATH="${PATH}:/src/moabs/bin"
 RUN ln -s /opt/conda/lib/libmysqlclient.so.20  /opt/conda/lib/libmysqlclient.so.18
 
 #custom scripts
-COPY WGBS_Workflow_01_PE_AD.sh WGBS_Workflow_01_SR.sh *.pl /src/
+COPY WGBS_Workflow_01_PE_AD.sh WGBS_Workflow_01_SR_AD.sh *.pl /src/
 RUN chmod +x /src/*
 
 RUN mkdir /workdir
