@@ -19,7 +19,7 @@ task fastqc{
     String? prefix1=basename(fastq1, fastq_suffix)
     String? prefix2=basename(fastq2, fastq_suffix)
 
-    String? outdir_suffix=""
+    String? out_prefix="fastqc"
     String? fastqc_args=""
 
     Int threads
@@ -30,16 +30,14 @@ task fastqc{
     Int preemtible
 
     command {
-        outdir="fastqc"
-        if [ -n "${outdir_suffix}" ]; then
-            outdir="$outdir_${outdir_suffix}"
-        fi
-        mkdir -p $outdir
+        mkdir -p ${out_prefix}
         $fastqc \
-          --outdir $outdir \
+          --outdir ${out_prefix} \
           --threads ${threads} \
           ${fastqc_args} \
           ${fastq1} ${fastq2}
+
+          tar -czvf ${$out_prefix}.tar.gz ${out_prefix}
     }
 
     runtime {
@@ -50,6 +48,7 @@ task fastqc{
     	    preemptible: "${preemtible}"
     }
     output {
+        fastqc_tar_gz="${out_prefix}.tar.gz"
         # fastqc outdir.tar.gz ??? (to send to multiqc)
         #CRC-0021-T-00_5_R1.trm_fastqc.html
         #CRC-0021-T-00_5_R2.trm_fastqc.zip
