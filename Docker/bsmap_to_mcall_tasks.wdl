@@ -154,23 +154,23 @@ task bsmap{
     File fastq2 #either raw fastq's or preprocessed
 
     #runtime inputs
-    Int bsmap_mem
-    Int bsmap_threads="12"
+    #Int bsmap_mem
+    #Int bsmap_threads="12"
     Int? samtools_pipe_threads="4"
-
     String docker
     Int mem
-    Int threads
-    Int disk_size_gb
-    Int preemtible
+    Int threads? = "12"
+    Int? disk_size_bufferer = "10"
+    Int? disk_size_gb = ceil(size(fastq1, "G")*2 + size(fastq2, "G") + size(reference_fa,"G") + size(reference_sizes,"G")) + disk_size_buffer
+    Int? preemtible = 3
 
     command {
             # -s = seed size, default=12(RRBS mode), 16(WGBS mode). min=8, max=16
             # -u = report unmapped reads, default=off
             # -R = print corresponding reference sequences in SAM output, default=off
-            # -q = #???
-            # -w = #???
-            # -S = 1 #@adunford ??? - stranded? Verify good for all data types
+            # -q =  quality threshold in trimming, 0-40, default=0 (no trim)
+            # -w =  maximum number of equal best hits to count, <=1000 
+            # -S = 1 seed for random number generation used in selecting multiple hits, keep nonzero for reproucibility
             echo total mem: ${mem}
             echo mem per samtools thread: $(((${mem}-1)/${samtools_pipe_threads}))G
 
@@ -209,12 +209,14 @@ task bsmap{
 }
 
 task clip_overlaps {
+    #From upstream tasks
     File bam_file
     File bam_index
     String? prefix=basename(bam_file, ".bam")
-
     String? clip_overlap_args="--stats --params --unmapped --noPhoneHome --poolSize 10000000"
 
+
+    #runtime
     String docker
     Int mem
     Int threads
@@ -249,17 +251,24 @@ task clip_overlaps {
 }
 
 task markduplicates {
+    #from workflow configuration
+    String sample_id
+    String? remove_dups="false" #WARNING: "true" LEADS TO LOSS OF READS IN FINAL BAM 
+    Int? max_records_in_ram="500000" #As in GTEx; Helene: "10000000"
+    Int? max_open_files="8000" #GATK default
+    Int? java_mem="3" # max heap size #As in GTEx; Helene: "16G"
+
+    
+    #from upstream task
     File bam_file
     File bam_index
-    String sample_id
     String? prefix=basename(bam_file, ".bam")
-
-    String remove_dups="true" #WARNING: "true" LEADS TO LOSS OF READS IN FINAL BAM
     Int? max_records_in_ram="500000" #As in GTEx; Helene: "10000000"
     Int? max_open_files="8000" #GATK default
     Int? java_mem="3" # max heap size #As in GTEx; Helene: "16G"
     String? read_name_regex="null" #skips optical duplicate finding (this is setting for HiSeq 4000 and NovaSeq 6000 that shouldnt have optical duplicates)
 
+    #runtime inputs
     String docker
     Int mem
     Int threads
@@ -313,8 +322,12 @@ task markduplicates {
 }
 
 task mcall {
-    File bam_file
-    File reference_fa
+    #From workflow config
+    File reference_Fa
+    
+    #From upstream tasks
+    File bam_file #either bsmap_bam or bam_md
+    
 INPUTS ???
 
     command {
