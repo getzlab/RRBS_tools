@@ -16,10 +16,10 @@ task fastqc{
     File fastq1
     File fastq2
     String? fastq_suffix='.fq.gz'
-    String? prefix1=basename(fastq1, fastq_suffix)
-    String? prefix2=basename(fastq2, fastq_suffix)
+    String? fastq1_prefix=basename(fastq1, fastq_suffix)
+    String? fastq2_prefix=basename(fastq2, fastq_suffix)
 
-    String? out_prefix="fastqc"
+    #String? tar_gz_prefix="fastqc"
     String? fastqc_args=""
 
     Int threads
@@ -30,16 +30,17 @@ task fastqc{
     Int preemtible
 
     command {
-        mkdir -p ${out_prefix}
+        mkdir -p ${tar_gz_prefix}
+
         $fastqc \
-          --outdir ${out_prefix} \
+          --outdir ${tar_gz_prefix} \
           --threads ${threads} \
           ${fastqc_args} \
           ${fastq1} ${fastq2}
 
-          tar -czvf ${$out_prefix}.tar.gz ${out_prefix}
+          #tar -czvf ${fastq1_prefix}.tar.gz ${out_prefix}
+          #tar -czvf ${fastq2_prefix}.tar.gz ${out_prefix}
     }
-
     runtime {
     	    docker: "${docker}"
     	    memory: "${mem}GB"
@@ -48,8 +49,11 @@ task fastqc{
     	    preemptible: "${preemtible}"
     }
     output {
-        fastqc_tar_gz="${out_prefix}.tar.gz"
-        # fastqc outdir.tar.gz ??? (to send to multiqc)
+        fq1_zip="${fastq1_prefix}_fastq.zip"
+        fq2_zip="${fastq2_prefix}_fastq.zip"
+
+        fq1_html="${fastq1_prefix}_fastq.html"
+        fq2_html="${fastq2_prefix}_fastq.html"
         #CRC-0021-T-00_5_R1.trm_fastqc.html
         #CRC-0021-T-00_5_R2.trm_fastqc.zip
     }
@@ -59,9 +63,18 @@ task preprocess_fastqs{
     File fastq1
     File fastq2
     String sample_id
-    #String genome_reference #@adunford, this is not needed in Terra (all defined in config)
-    File reference_fa
-    File reference_sizes #chromosome sizes
+
+    # adaptors[illumina]='AGATCGGAAGAGC'
+    # adaptors[smallrna]='TGGAATTCTCGG'
+    # adaptors[nextera]='CTGTCTCTTATA'
+    String? adaptors="AGATCGGAAGAGC" #illumina
+    Int? min_length="25"
+    Int? min_qual="20"
+    Int? swift_trim_off="10"
+    # If data has been generated on NextSeq or NovaSeq 2-color machines,
+    # we need to apply a different type of quality clipping (due to dark cycles)
+    # If so, specify "--nextseq-trim"
+    String? trimming_type="--quality-cutoff"
 
     Int threads
     Int seed_size #seed size, default=16(WGBS mode), 12(RRBS mode). min=8, max=16.
@@ -71,10 +84,40 @@ task preprocess_fastqs{
     Int preemtible
 
     command {
-    	    /src/NEW_WORKFLOW_NAME-???.sh -1 ${fastq1} -2 ${fastq2} -s ${sample_id} -c ${threads}
+            ### cutadapt
+            ## R1----->
+            ## ~~~~~~~|=======================|~~~~~~~
+            ##   AD   |        DNA            |   AD
+            ## ~~~~~~~|=======================|~~~~~~~
+            ##                                <-----R2
+            echo current adaptor sequences: ${adaptors}
+            # quality clipping is done BEFORE adaptor clipping
+            cutadapt \
+        	${trimming_type} ${min_qual} \
+        	--overlap 5 \
+        	--minimum-length $((${min_length} + 2 * ${swift_trim_off})) \
+        	--cores $(($threads / 2)) \
+        	--adapter ${adaptors} \
+        	-A ${adaptors} \
+        	--interleaved \
+        	$FQ1 \
+        	$FQ2 \
+        	2>.log_a | \
+            cutadapt \
+                --interleaved \
+        	--minimum-length ${min_length} \
+        	--cores $((${threads} / 2)) \
+        	--cut ${swift_trim_off} \
+        	--cut -${swift_trim_off} \
+        	-U ${swift_trim_off} -U -${swift_trim_off} \
+        	--output ${sample_id}_R1.trm.fq.gz \
+        	--paired-output ${sample_id}_R2.trm.fq.gz \
+        	- \
+            &>.log_b
 
-            ### cutadapt
-            ### cutadapt
+            ## merge log output
+            cat .log_a .log_b > ${sample_id}_FastQ-Trimming-Adp.log
+            rm .log_a .log_b
  	    }
 
     runtime {
@@ -87,6 +130,7 @@ task preprocess_fastqs{
     output {
 	    File fastq1_trimmed = "${sample_id}_R1.trm.fq.gz"
 	    File fastq2_trimmed = "${sample_id}_R2.trm.fq.gz"
+        File trimming_log = "${sample_id}_fastq_trimming.log"
     }
 }
 
@@ -262,6 +306,7 @@ task markduplicates {
 
 task mcall {
     File bam_file
+    File reference_fa
 INPUTS ???
 
     command {
@@ -271,7 +316,7 @@ INPUTS ???
 
         mcall \
           --threads ${threads} \
-          --reference ${genome_index[$GENOME]} \
+          --reference ${reference_fa} \
           --sampleName ${sample_id} \ #BK: removed genome index
           --mappedFiles ${bam_file} \
           --outputDir $results_dir \
