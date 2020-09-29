@@ -13,6 +13,7 @@
 # docker not optional in tasks, only in workflow; hardcode version
 
 task fastqc{
+    #inputs from workflow config, or upstream task if preprocessing done
     File fastq1
     File fastq2
     String? fastq_suffix='.fq.gz'
@@ -22,8 +23,8 @@ task fastqc{
     #String? tar_gz_prefix="fastqc"
     String? fastqc_args=""
 
+    #runtime inputs
     Int threads
-    Int seed_size #seed size, default=16(WGBS mode), 12(RRBS mode). min=8, max=16.
     String? docker="adunford/bsmap_to_mcall:latest"
     Int disk_size_gb
     Int mem
@@ -60,10 +61,10 @@ task fastqc{
 }
 
 task preprocess_fastqs{
+    #inputs from workflow config
     File fastq1
     File fastq2
     String sample_id
-
     # adaptors[illumina]='AGATCGGAAGAGC'
     # adaptors[smallrna]='TGGAATTCTCGG'
     # adaptors[nextera]='CTGTCTCTTATA'
@@ -76,8 +77,8 @@ task preprocess_fastqs{
     # If so, specify "--nextseq-trim"
     String? trimming_type="--quality-cutoff"
 
+    #runtime inputs
     Int threads
-    Int seed_size #seed size, default=16(WGBS mode), 12(RRBS mode). min=8, max=16.
     String docker
     Int disk_size_gb
     Int mem
@@ -135,17 +136,24 @@ task preprocess_fastqs{
 }
 
 task bsmap{
-    File fastq1
-    File fastq2
     String sample_id
-    #GENOME    : either 'mm9'/'mm10' (mouse) or 'hg19'/'hg38' (human).
-    String genome_reference
+    String genome_reference #GENOME    : either 'mm9'/'mm10' (mouse) or 'hg19'/'hg38' (human).  Currently only test with hg19 
     File reference_fa
     File reference_sizes
     Int? seed_size="12" #default=12(RRBS mode), 16(WGBS mode). min=8, max=16.
     Int? max_insert_size="1000" # max insert size for PE mapping (-x)
+    # -q is quality threshold.  Here it's 20, default is 0, should we do 0 if preprocessing done?
+    # -w<int>   maximum number of equal best hits to count, <=1000
+    # -S seed for rng.  0 for system clock (not reproducible) otherwise produces reproducible results.
+    # -u   report unmapped reads, default=off
+    # -R          print corresponding reference sequences in SAM output, default=off
     String? bsmap_args="-q 20 -w 100 -S 1 -u -R" #??? understand each param in context of RRBS vs WGBS
 
+    #inputs from upstream task OR workflow config
+    File fastq1
+    File fastq2 #either raw fastq's or preprocessed
+
+    #runtime inputs
     Int bsmap_mem
     Int bsmap_threads="12"
     Int? samtools_pipe_threads="4"
