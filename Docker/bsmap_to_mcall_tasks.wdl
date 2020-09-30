@@ -23,7 +23,6 @@ task fastqc{
     String? fastqc_args=""
 
     Int threads
-    Int seed_size #seed size, default=16(WGBS mode), 12(RRBS mode). min=8, max=16.
     String? docker="adunford/bsmap_to_mcall:latest"
     Int disk_size_gb
     Int mem
@@ -32,7 +31,7 @@ task fastqc{
     command {
         mkdir -p ${tar_gz_prefix}
 
-        $fastqc \
+        fastqc \
           --outdir ${tar_gz_prefix} \
           --threads ${threads} \
           ${fastqc_args} \
@@ -100,8 +99,8 @@ task preprocess_fastqs{
         	--adapter ${adaptors} \
         	-A ${adaptors} \
         	--interleaved \
-        	$FQ1 \
-        	$FQ2 \
+        	${fastq1} \
+        	${fastq2} \
         	2>.log_a | \
             cutadapt \
                 --interleaved \
@@ -171,7 +170,7 @@ task bsmap{
             ###@adunford, please review the memory and thread allocations
 
             bsmap \
-              -v 0.1 -s $seed_size ${bsmap_args} \
+              -v 0.1 -s ${seed_size} ${bsmap_args} \
               -x ${max_insert_size} \
               -p $((${threads}-$samtools_pipe_threads)) \
               -d ${genome_index} \
@@ -210,8 +209,8 @@ task clip_overlaps {
     String docker
     Int mem
     Int threads
-    Int disk_buffer_gb = "20"
-    Int disk_size_gb = ceil(size(bam_file, "G") + size(bam_index, "G")) * 3 #for input, intermediates, output
+    Int? disk_buffer_gb = "20"
+    Int? disk_size_gb = ceil(size(bam_file, "G") + size(bam_index, "G")) * 3 + disk_buffer_gb #for input, intermediates, output
     Int preemtible
 
     command {
