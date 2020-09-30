@@ -215,7 +215,7 @@ task bsmap{
     }
 }
 
-task clip_overlaps {
+task clip_overlap {
     #From upstream tasks
     File bam_file
     File bam_index
@@ -258,21 +258,18 @@ task clip_overlaps {
 }
 
 task markduplicates {
-    #from workflow configuration
+    File bam_file
+    File bam_index
     String sample_id
+
+    String? bam_prefix=basename(bam_file, ".bam")
+
     String? remove_dups="false" #WARNING: "true" LEADS TO LOSS OF READS IN FINAL BAM
     Int? max_records_in_ram="500000" #As in GTEx; Helene: "10000000"
     Int? max_open_files="8000" #GATK default
     Int? java_mem="3" # max heap size #As in GTEx; Helene: "16G"
-
-    #from upstream task
-    File bam_file
-    File bam_index
-    String? bam_prefix=basename(bam_file, ".bam")
-    Int? max_records_in_ram="500000" #As in GTEx; Helene: "10000000"
-    Int? max_open_files="8000" #GATK default
-    Int? java_mem="3" # max heap size #As in GTEx; Helene: "16G"
     String? read_name_regex="null" #skips optical duplicate finding (this is setting for HiSeq 4000 and NovaSeq 6000 that shouldnt have optical duplicates)
+    String? other_args=""
 
     #runtime inputs
     String? docker = "adunford/bsmap_to_mcall:0.32"
@@ -305,7 +302,8 @@ task markduplicates {
           --METRICS_FILE=${bam_prefix}.dedup-metrics.txt \ #if name not essential better to change to md-metrics.txt
           --TMP_DIR=$temp_dir \
           --VALIDATION_STRINGENCY=LENIENT \
-          --READ_NAME_REGEX=${read_name_regex}
+          --READ_NAME_REGEX=${read_name_regex} \
+          ${other_args}
 
         echo $(date +"### [%Y-%m-%d %H:%M:%S] Creating BAM Index for ${bam_prefix}.md.bam")
         samtools index -@ ${threads} ${bam_prefix}.md.bam
@@ -464,7 +462,7 @@ workflow bsmap_to_mcall_PE {
     File reference_sizes #for bsmap, mcall
 
     ## Control variables
-    Boolean? run_clip_overlaps = true
+    Boolean? run_clip_overlap = true
     Boolean? run_markduplicates = true
 
     ### workflow-wide optional runtime variables
@@ -490,6 +488,17 @@ workflow bsmap_to_mcall_PE {
     Int? bsmap_max_insert_size # max insert size for PE mapping (-x)
     String? bsmap_args
 
+    ## for markduplicates
+    String? markdups_remove_dups #WARNING: "true" LEADS TO LOSS OF READS IN FINAL BAM
+    Int? markdups_max_records_in_ram #As in GTEx; Helene: "10000000"
+    Int? markdups_max_open_files #GATK default
+    Int? markdups_java_mem # max heap size #As in GTEx; Helene: "16G"
+    String? markdups_read_name_regex #skips optical duplicate finding (this is setting for HiSeq 4000 and NovaSeq 6000 that shouldnt have optical duplicates)
+    String? markdups_other_args
+
+    ## for clip overlaps
+    String? clip_overlap_args
+
     ## for mcall
     String? mcall_args
 
@@ -512,10 +521,10 @@ workflow bsmap_to_mcall_PE {
     Int? bsmap_disk_size_buffer
     Int? bsmap_num_preempt
 
-    Int? run_clip_overlap_mem
-    Int? run_clip_overlap_threads
-    Int? run_clip_overlap_disk_size_buffer
-    Int? run_clip_overlap_num_preempt
+    Int? clip_overlap_mem
+    Int? clip_overlap_threads
+    Int? clip_overlap_disk_size_buffer
+    Int? clip_overlap_num_preempt
 
     Int? mcall_mem
     Int? mcall_threads
@@ -530,90 +539,102 @@ workflow bsmap_to_mcall_PE {
 
     call trim_fastqs {
         input:
-            fastq1=fastq1
-            fastq2=fastq2
-
-            sample_id=sample_id
-
-            docker = docker
-            mem = trim_fastqs_mem
-            threads = trim_fastqs_threads
-            disk_size_buffer = trim_fastqs_disk_size_buffer
+            fastq1=fastq1,
+            fastq2=fastq2,
+            sample_id=sample_id,
+            docker = docker,
+            mem = trim_fastqs_mem,
+            threads = trim_fastqs_threads,
+            disk_size_buffer = trim_fastqs_disk_size_buffer,
             num_preempt = select_first(trim_fastqs_num_preempt, num_preempt)
     }
 
     call fastqc as fastqc_raw {
         input:
-            fastq1 = fastq1
-            fastq2 = fastq2
-            fastq_suffix = fastq_suffix
-            fastqc_args = fastqc_args_raw
-
-            docker = select_first(fastqc_docker, docker)
-            mem = fastqc_mem
-            threads = fastqc_threads
-            disk_size_buffer = fastqc_disk_size_buffer
+            fastq1 = fastq1,
+            fastq2 = fastq2,
+            fastq_suffix = fastq_suffix,
+            fastqc_args = fastqc_args_raw,
+            docker = select_first(fastqc_docker, docker),
+            mem = fastqc_mem,
+            threads = fastqc_threads,
+            disk_size_buffer = fastqc_disk_size_buffer,
             num_preempt = select_first(fastqc_num_preempt, num_preempt)
     }
 
     call fastqc as fastqc_trimmed {
         input:
-            fastq1 = trim_fastqs.fastq1_trimmed
-            fastq2 = trim_fastqs.fastq2_trimmed
-            docker = docker
-            mem = fastqc_mem
-            threads = fastqc_threads
-            disk_size_buffer = fastqc_disk_size_buffer
+            fastq1 = trim_fastqs.fastq1_trimmed,
+            fastq2 = trim_fastqs.fastq2_trimmed,
+            docker = docker,
+            mem = fastqc_mem,
+            threads = fastqc_threads,
+            disk_size_buffer = fastqc_disk_size_buffer,
             num_preempt = select_first(fastqc_num_preempt, num_preempt)
     }
 
     call bsmap{
         input:
-            fastq1=select_first(trim_fastqs.fastq1_trimmed, fastq1)
-            fastq2=select_first(trim_fastqs.fastq2_trimmed, fastq2)
-            sample_id=sample_id
-            reference_fa=reference_fa
-            reference_sizes=reference_sizes
-            bsmap_seed_size=bsmap_seed_size #default=12(RRBS mode), 16(WGBS mode). min=8, max=16.
-            bsmap_max_insert_size=bsmap_max_insert_size # max insert size for PE mapping (-x)
-            bsmap_args=bsmap_args
-            docker = docker
-            mem = bsmap_mem
-            threads = bsmap_threads
-            disk_size_buffer = bsmap_disk_size_buffer
+            fastq1=select_first(trim_fastqs.fastq1_trimmed, fastq1),
+            fastq2=select_first(trim_fastqs.fastq2_trimmed, fastq2),
+            sample_id=sample_id,
+            reference_fa=reference_fa,
+            reference_sizes=reference_sizes,
+            bsmap_seed_size=bsmap_seed_size,
+            bsmap_max_insert_size=bsmap_max_insert_size,
+            bsmap_args=bsmap_args,
+            docker = docker,
+            mem = bsmap_mem,
+            threads = bsmap_threads,
+            disk_size_buffer = bsmap_disk_size_buffer,
             num_preempt = select_first(bsmap_num_preempt, num_preempt)
     }
 
-    if(run_clip_overlaps){
-        call clip_overlaps{
+    if(run_clip_overlap){
+        call clip_overlap{
             input:
-                docker = docker
-                mem = run_clip_overlap_mem
-                threads = run_clip_overlap_threads
-                disk_size_buffer = run_clip_overlap_disk_size_buffer
-                num_preempt = select_first(run_clip_overlap_num_preempt, num_preempt)
+                bam_file = bsmap.bam,
+                bam_index = bsmap.bam_index,
+                clip_overlap_args = clip_overlap_args,
+                docker = docker,
+                mem = clip_overlap_mem,
+                threads = clip_overlap_threads,
+                disk_size_buffer = clip_overlap_disk_size_buffer,
+                num_preempt = select_first(clip_overlap_num_preempt, num_preempt)
         }
     }
 
     if(run_markduplicates){
         call markduplicates{
             input:
-                bam_file = select_first([run_clip_overlap.bam_overlap_clipped , bsmap.bam])
-                bam_index = select_first([run_clip_overlap.bam_overlap_clipped_index , bsmap.bam_index])
+                bam_file = select_first([clip_overlap.bam_overlap_clipped , bsmap.bam]),
+                bam_index = select_first([clip_overlap.bam_overlap_clipped_index , bsmap.bam_index]),
+                sample_id = sample_id
+                remove_dups = markdups_remove_dups,
+                max_records_in_ram = markdups_max_records_in_ram,
+                max_open_files = markdups_max_open_files,
+                java_mem = markdups_java_mem,
+                read_name_regex = markdups_read_name_regex,
+                other_args = markdups_other_args,
+                docker = docker,
+                mem = markdup_overlap_mem,
+                threads = markdup_threads,
+                disk_size_buffer = markdup_disk_size_buffer,
+                num_preempt = select_first(markdup_num_preempt, num_preempt)
         }
     }
 
     call mcall {
         input:
-            bam_file = select_first([markduplicates.bam_md, run_clip_overlap.bam_overlap_clipped , bsmap.bam])
-            bam_index = select_first([markduplicates.bam_md_index, run_clip_overlap.bam_overlap_clipped_index , bsmap.bam_index])
-            reference_fa=reference_fa
-            reference_sizes=reference_sizes
-            mcall_args = mcall_args
-            docker = docker
-            mem = mcall_mem
-            threads = mcall_threads
-            disk_size_buffer = mcall_disk_size_buffer
+            bam_file = select_first([markduplicates.bam_md, run_clip_overlap.bam_overlap_clipped , bsmap.bam]),
+            bam_index = select_first([markduplicates.bam_md_index, run_clip_overlap.bam_overlap_clipped_index , bsmap.bam_index]),
+            reference_fa=reference_fa,
+            reference_sizes=reference_sizes,
+            mcall_args = mcall_args,
+            docker = docker,
+            mem = mcall_mem,
+            threads = mcall_threads,
+            disk_size_buffer = mcall_disk_size_buffer,
             num_preempt = select_first(mcall_num_preempt, num_preempt)
     }
 
@@ -621,18 +642,18 @@ workflow bsmap_to_mcall_PE {
         ### Get .zip & .html for fastqc ; trimmed report; markdup report
         ### Outputs will include a tar.gz + multiqc output
         input:
-            sample_id = sample_id
-            fastq1_fastqc = fastqc_raw.fq1_zip
-            fastq2_fastqc = fastqc_raw.fq2_zip
-            fastq1_trimmed_fastqc = fastqc_trimmed.fq1_zip
-            fastq2_trimmed_fastqc = fastqc_trimmed.fq2_zip
-            trimming_log = fastqc_trimmed.trimming_log
-            bam_markdups_report = markduplicates.bam_md_stats
-            multiqc_args = multiqc_args
-            docker = docker
-            mem = multiqc_mem
-            threads = multiqc_threads
-            disk_size_buffer = multiqc_disk_size_buffer
+            sample_id = sample_id,
+            fastq1_fastqc = fastqc_raw.fq1_zip,
+            fastq2_fastqc = fastqc_raw.fq2_zip,
+            fastq1_trimmed_fastqc = fastqc_trimmed.fq1_zip,
+            fastq2_trimmed_fastqc = fastqc_trimmed.fq2_zip,
+            trimming_log = fastqc_trimmed.trimming_log,
+            bam_markdups_report = markduplicates.bam_md_stats,
+            multiqc_args = multiqc_args,
+            docker = docker,
+            mem = multiqc_mem,
+            threads = multiqc_threads,
+            disk_size_buffer = multiqc_disk_size_buffer,
             num_preempt = select_first(multiqc_num_preempt, num_preempt)
     }
 
@@ -645,8 +666,8 @@ workflow bsmap_to_mcall_PE {
 
     output {
         #bsmap
-        File bsmap_bam_final = select_first([markduplicates.bam_md, clip_overlaps.bam_overlap_clipped, bsmap.bam])
-        Array[File] bsmap_align_stats = select_all([bsmap.bam_stats, clip_overlaps.bam_overlap_clipped_stats, markduplicates.bam_md_stats])
+        File bsmap_bam_final = select_first([markduplicates.bam_md, clip_overlap.bam_overlap_clipped, bsmap.bam])
+        Array[File] bsmap_align_stats = select_all([bsmap.bam_stats, clip_overlap.bam_overlap_clipped_stats, markduplicates.bam_md_stats])
         #multiqc
         File multiqc_report_html = multiqc.multiqc_report_html
         File multiqc_tar_gz = multiqc.multiqc_tar_gz
