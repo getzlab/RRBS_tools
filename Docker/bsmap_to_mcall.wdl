@@ -1,15 +1,3 @@
-###??? To do
-#### Add workflow outputs!
-# trim_fastqs
-# -- May want threads-1 (this seems to have been the setting)
-# Cutadapt:
-# --- Understand swift_trim_off=10 (are we trimming too much?)
-# --- Check if our data was on "NextSeq or NovaSeq 2-color machines" (if so needs different quality trimming)
-
-# mcall
-# -- Deleted (make sure not needed): --outputDir $results_dir
-# -- Deleted (make sure not needed): --webOutputDir $results_dir
-
 task fastqc{
     #inputs from workflow config, or upstream task if preprocessing done
     File fastq1
