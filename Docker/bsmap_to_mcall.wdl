@@ -3,8 +3,8 @@ task fastqc{
     File fastq1
     File fastq2
     String? fastq_suffix = '.fq.gz'
-    String? fastq1_prefix = basename(fastq1, fastq_suffix)
-    String? fastq2_prefix = basename(fastq2, fastq_suffix)
+    String? fastq1_prefix = basename(basename(basename(basename(fastq1, fastq_suffix), '.gz'), '.fastq'), '.fq')
+    String? fastq2_prefix = basename(basename(basename(basename(fastq2, fastq_suffix), '.gz'), '.fastq'), '.fq')
 
     #String? tar_gz_prefix="fastqc"
     String? fastqc_args = ""
