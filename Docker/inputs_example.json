@@ -1,5 +1,5 @@
-{"bsmap_to_mcall_PE.fastq1":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/toy500KreadsPE_1.fastq.gz",
-"bsmap_to_mcall_PE.fastq2":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/toy500KreadsPE_2.fastq.gz",
+{"bsmap_to_mcall_PE.fastq1":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/toy500KreadsPE_1.fq.gz",
+"bsmap_to_mcall_PE.fastq2":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/toy500KreadsPE_2.fq.gz",
 "bsmap_to_mcall_PE.sample_id":"toy500KreadsPE",
 "bsmap_to_mcall_PE.reference_fa":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/hg19.fa",
 "bsmap_to_mcall_PE.reference_sizes":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/hg19.chrom.sizes"}
