@@ -2,4 +2,5 @@
 "bsmap_to_mcall_PE.fastq2":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/toy500KreadsPE_2.fq.gz",
 "bsmap_to_mcall_PE.sample_id":"toy500KreadsPE",
 "bsmap_to_mcall_PE.reference_fa":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/hg19.fa",
-"bsmap_to_mcall_PE.reference_sizes":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/hg19.chrom.sizes"}
+"bsmap_to_mcall_PE.reference_sizes":"/xchip/cga_home/bknisbac/CLL/results_cll1085/methylation/bsmap_inputs/hg19.chrom.sizes",
+"bsmap_to_mcall_PE.docker":"gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.1"}
