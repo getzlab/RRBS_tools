@@ -21,7 +21,7 @@ RUN conda config --add channels conda-forge
 
 #bsmap, gatk5, fastqc, multiqc and other stuff I haven't had a reason to install separately with conda
 #Specifying gatk 4.1.5 because sometime before 4.1.8 the syntax changes
-RUN conda install bsmap gatk4=4.1.5.0 fastqc  multiqc bamutil cutadapt deeptools  ucsc-bedtobigbed 
+RUN conda install bsmap gatk4=4.1.5.0 fastqc  multiqc bamutil cutadapt deeptools  ucsc-bedtobigbed
 
 
 #mcall
@@ -35,7 +35,7 @@ RUN git clone https://github.com/sunnyisgalaxy/moabs.git
 #WORKDIR  moabs
 #RUN apt-get install make
 #RUN make
-#RUN make install 
+#RUN make install
 
 #Set to POSIX in the script currently being used...
 ENV LC_ALL "POSIX"
@@ -56,6 +56,7 @@ RUN ln -s /opt/conda/lib/libmysqlclient.so.20  /opt/conda/lib/libmysqlclient.so.
 
 #custom scripts
 COPY WGBS_Workflow_01_PE_AD.sh WGBS_Workflow_01_SR_AD.sh *.pl /src/
+COPY monitor_script.sh WGBS_Workflow_01_SR_AD.sh *.pl /src/
 RUN chmod +x /src/*
 
 RUN mkdir /workdir
