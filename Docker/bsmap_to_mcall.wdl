@@ -7,14 +7,8 @@
 # --- Check if our data was on "NextSeq or NovaSeq 2-color machines" (if so needs different quality trimming)
 
 # mcall
-# -- list of outputs!
-# -- understand bed vs bigbed
-# -- decide if to gzip beds (likely yes!)
 # -- Deleted (make sure not needed): --outputDir $results_dir
 # -- Deleted (make sure not needed): --webOutputDir $results_dir
-
-# expose more options for markduplicates
-# expose more options for clipoverlaps
 
 task fastqc{
     #inputs from workflow config, or upstream task if preprocessing done
@@ -85,7 +79,7 @@ task trim_fastqs{
     #runtime inputs
     String? docker="adunford/bsmap_to_mcall:0.32"
     Int? mem = "3"
-    Int? threads = "1"
+    Int? threads = "2"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "2"
     Int? disk_size_gb = ceil( (size(fastq1, "G") + size(fastq2, "G")) * disk_scaler) + disk_size_buffer
@@ -179,7 +173,6 @@ task bsmap{
     File fastq2
     String sample_id
     File reference_fa
-    File reference_sizes
     Int? seed_size="12" #default=12(RRBS mode), 16(WGBS mode). min=8, max=16.
     Int? max_insert_size="1000" # max insert size for PE mapping (-x)
     # -q is quality threshold.  Here it's 20, default is 0, should we do 0 if preprocessing done?
@@ -502,7 +495,7 @@ workflow bsmap_to_mcall_PE {
 
     #### Per tasks ####
     ## for fastqc
-    String fastq_suffix #defaults to "fq.gz"
+    String? fastq_suffix #defaults to "fq.gz"
     String? fastqc_args_raw
     String? fastqc_args_trimmed
 
@@ -640,6 +633,7 @@ workflow bsmap_to_mcall_PE {
     call bamstat as bamstat_bsmap{
         input:
             bam_file = bsmap.bam,
+            bam_index = bsmap.bam_index,
             docker = docker,
             mem = bamstat_mem,
             threads = bamstat_threads,
@@ -662,6 +656,7 @@ workflow bsmap_to_mcall_PE {
         call bamstat as bamstat_co{
             input:
                 bam_file = clip_overlap.bam_overlap_clipped,
+                bam_index = clip_overlap.bam_overlap_clipped_index,
                 docker = docker,
                 mem = bamstat_mem,
                 threads = bamstat_threads,
@@ -694,6 +689,7 @@ File? overlap_clipped_bam_index = clip_overlap.bam_overlap_clipped_index
         call bamstat as bamstat_md{
             input:
                 bam_file = markduplicates.bam_md,
+                bam_index = markduplicates.bam_md_index,
                 docker = docker,
                 mem = bamstat_mem,
                 threads = bamstat_threads,
@@ -740,6 +736,11 @@ File? markdup_bam_index = clip_overlap.bam_overlap_clipped_index
             num_preempt = select_first([multiqc_num_preempt, num_preempt])
     }
 
+
+    File? bamstats_bsmap_file = bamstat_bsmap.bam_stats
+    File? bamstats_co_file = bamstat_co.bam_stats
+    File? bamstats_md_file = bamstat_md.bam_stats
+
     meta {
         author: "Binyamin A. Knisbacher"
         email: "bknisbac@broadinstitute.org"
@@ -750,7 +751,7 @@ File? markdup_bam_index = clip_overlap.bam_overlap_clipped_index
     output {
         #bsmap
         File bsmap_bam_final = select_first([markduplicates.bam_md, clip_overlap.bam_overlap_clipped, bsmap.bam])
-        Array[File] bsmap_align_stats = select_all([bamstat_bsmap.bam_stats, bamstat_co.bam_stats, bamstat_md.bam_stats])
+        Array[File] bsmap_align_stats = select_all([bamstats_bsmap_file, bamstats_co_file, bamstats_md_file])
         #multiqc
         File multiqc_report_html = multiqc.multiqc_report_html
         File multiqc_tar_gz = multiqc.multiqc_tar_gz
