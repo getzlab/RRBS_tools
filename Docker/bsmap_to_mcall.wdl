@@ -25,11 +25,13 @@ task fastqc{
           --threads ${threads} \
           ${fastqc_args} \
           ${fastq1} ${fastq2}
+
+          find . | xargs ls -l
     }
     runtime {
         docker: "${docker}"
         memory: "${mem}GB"
-        cpu: "${threads}+1"
+        cpu: "${threads}"
         disks: "local-disk ${disk_size_gb} HDD"
         preemptible: "${num_preempt}"
     }
@@ -109,6 +111,8 @@ task trim_fastqs{
 
             ## merge log output
             cat .log_a .log_b > ${sample_id}_FastQ-Trimming-Adp.log
+
+            find . | xargs ls -l
  	    }
 
     runtime {
@@ -121,7 +125,7 @@ task trim_fastqs{
     output {
 	    File fastq1_trimmed = "${fastq1_prefix}${trimmed_suffix}"
 	    File fastq2_trimmed = "${fastq2_prefix}${trimmed_suffix}"
-        File trimming_log = "${sample_id}_fastq_trimming.log"
+        File trimming_log = "${sample_id}_FastQ-Trimming-Adp.log"
     }
 }
 
@@ -142,6 +146,8 @@ task bamstat {
     command {
             /src/monitor_script.sh &
             bamstats --bam ${bam_file} --threads $((${threads}-1)) --verbose | tee ${prefix}.stats.txt
+
+            find . | xargs ls -l
         }
 
     runtime {
@@ -208,6 +214,8 @@ task bsmap{
 
             echo "Creating BAM Index for $bam_file"
             samtools index -@ ${threads} $bam_file
+
+            find . | xargs ls -l
  	    }
     runtime {
         docker: "${docker}"
@@ -248,6 +256,8 @@ task clip_overlap {
 
         echo $(date +"### [%Y-%m-%d %H:%M:%S] Creating BAM Index for $bam_file_oc")
         samtools index -@ ${threads} $bam_file_oc
+
+        find . | xargs ls -l
     }
     runtime {
         docker: "${docker}"
@@ -316,6 +326,8 @@ task markduplicates {
 
         echo $(date +"### [%Y-%m-%d %H:%M:%S] Creating BAM Index for ${bam_prefix}.md.bam")
         samtools index -@ ${threads} ${bam_prefix}.md.bam
+
+        find . | xargs ls -l
     }
 
     runtime {
@@ -384,6 +396,8 @@ task mcall {
         rm -f $tmp_file
 
         gzip ${sample_id}.CpG.bed
+
+        find . | xargs ls -l
     }
     runtime {
         docker: "${docker}"
@@ -451,6 +465,8 @@ task multiqc {
         multiqc $multiqc_dir --filename ${sample_id}.multiqc_report.txt ${multiqc_args}
 
         tar -cxvf $multiqc_dir.tar.gz $multiqc_dir
+
+        find . | xargs ls -l
     }
 
     runtime {
