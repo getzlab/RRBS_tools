@@ -21,7 +21,10 @@ task fastqc{
     command {
         /src/monitor_script.sh &
 
+        mkdir fastqc_results
+
         fastqc \
+        --outdir .
           --threads ${threads} \
           ${fastqc_args} \
           ${fastq1} ${fastq2}
@@ -176,12 +179,13 @@ task bsmap{
     # -R          print corresponding reference sequences in SAM output, default=off
     String? bsmap_args="-q 20 -w 100 -S 1 -u -R" #??? understand each param in context of RRBS vs WGBS
 
-    Int? sort_threads = "4"
-    Int? sort_mem_per_thread = "1"
+    Int? sort_threads = "2"
+    String? sort_args = ""
 
     #runtime inputs
     String? docker="adunford/bsmap_to_mcall:0.32"
-    Int? mem = "7"
+    #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
+    Int? mem = "10"
     Int? threads = "12"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "2"
@@ -203,13 +207,12 @@ task bsmap{
             bsmap \
               -v 0.1 -s ${seed_size} ${bsmap_args} \
               -x ${max_insert_size} \
-              -p $((${threads}-${sort_threads})) \
+              -p ${threads} \
               -d ${reference_fa} \
               -a ${fastq1} \
               -b ${fastq2} > $bam_file_unsorted
 
-
-            samtools sort -m  ${sort_mem_per_thread}G --threads ${sort_threads} --output-fmt BAM -o $bam_file $bam_file_unsorted
+            samtools sort ${sort_args} --threads ${sort_threads} --output-fmt BAM -o $bam_file $bam_file_unsorted
             rm $bam_file_unsorted
 
             echo "Creating BAM Index for $bam_file"
@@ -227,7 +230,6 @@ task bsmap{
     output {
         File bam = "${sample_id}.bsmap.srt.bam"
         File bam_index = "${sample_id}.bsmap.srt.bam.bai"
-        File bam_stats = "${sample_id}.bsmap.srt.stats.txt"
     }
 }
 
@@ -268,9 +270,8 @@ task clip_overlap {
     }
 
     output {
-        File bam_overlap_clipped="${bam_prefix}.oc.bam" #@adunford: does this work?
+        File bam_overlap_clipped="${bam_prefix}.oc.bam"
         File bam_overlap_clipped_index="${bam_prefix}.oc.bam.bai"
-        File bam_overlap_clipped_stats="${bam_prefix}.oc.bam.stats.txt"
     }
 }
 
@@ -318,7 +319,7 @@ task markduplicates {
           --MAX_RECORDS_IN_RAM=${max_records_in_ram} \
           --INPUT=${bam_file} \
           --OUTPUT=${bam_prefix}.md.bam \
-          --METRICS_FILE=${bam_prefix}.dedup-metrics.txt \ #if name not essential better to change to md-metrics.txt
+          --METRICS_FILE=${bam_prefix}.md-metrics.txt \ #if name not essential better to change to md-metrics.txt
           --TMP_DIR=$temp_dir \
           --VALIDATION_STRINGENCY=LENIENT \
           --READ_NAME_REGEX=${read_name_regex} \
@@ -340,7 +341,7 @@ task markduplicates {
     output {
         File bam_md="${bam_prefix}.md.bam"
         File bam_md_index="${bam_prefix}.md.bam.bai"
-        File bam_md_stats="${bam_prefix}.md.bam.stats.txt"
+        File bam_md_metrics="${bam_prefix}.md-metrics.txt"
     }
 }
 
@@ -516,7 +517,7 @@ workflow bsmap_to_mcall_PE {
     Int? bsmap_max_insert_size # max insert size for PE mapping (-x)
     String? bsmap_args
     Int? bsmap_sort_threads
-    Int? bsmap_sort_mem_per_thread
+    Int? bsmap_sort_args
 
     ## for markduplicates
     String? markdups_remove_dups #WARNING: "true" LEADS TO LOSS OF READS IN FINAL BAM
@@ -625,8 +626,8 @@ workflow bsmap_to_mcall_PE {
             seed_size=bsmap_seed_size,
             max_insert_size=bsmap_max_insert_size,
             bsmap_args=bsmap_args,
-            sort_mem_per_thread=bsmap_sort_mem_per_thread,
             sort_threads=bsmap_sort_threads,
+            sort_args=bsmap_sort_args,
             docker = docker,
             mem = bsmap_mem,
             threads = bsmap_threads,
@@ -731,7 +732,7 @@ File? markdup_bam_index = clip_overlap.bam_overlap_clipped_index
             fastq1_trimmed_fastqc = trim_fastqs.fastq1_trimmed,
             fastq2_trimmed_fastqc = trim_fastqs.fastq2_trimmed,
             trimming_log = trim_fastqs.trimming_log,
-            bam_markdups_report = markduplicates.bam_md_stats,
+            bam_markdups_report = markduplicates.bam_md_metrics,
             multiqc_args = multiqc_args,
             docker = docker,
             mem = multiqc_mem,
