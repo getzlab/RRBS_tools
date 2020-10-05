@@ -2,9 +2,9 @@ task fastqc{
     #inputs from workflow config, or upstream task if preprocessing done
     File fastq1
     File fastq2
-    String? fastq_suffix = '.fq.gz'
-    String? fastq1_prefix = basename(basename(basename(basename(fastq1, fastq_suffix), '.gz'), '.fastq'), '.fq')
-    String? fastq2_prefix = basename(basename(basename(basename(fastq2, fastq_suffix), '.gz'), '.fastq'), '.fq')
+    String? fastq_suffix = '.fastq.gz'
+    String? fastq1_prefix = basename(fastq1, fastq_suffix)
+    String? fastq2_prefix = basename(fastq2, fastq_suffix)
 
     #String? tar_gz_prefix="fastqc"
     String? fastqc_args = ""
