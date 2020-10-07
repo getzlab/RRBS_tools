@@ -3,7 +3,11 @@ from continuumio/miniconda3:4.8.2
 
 #Install prerequisites: pigz
 RUN apt-get update -y
-RUN apt-get install -y pigz
+RUN apt-get install -y apt-utils curl wget pigz python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    apt-get clean && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/{apt,dpkg,cache,log}/
 
 ##Download and install conda
 #WORKDIR /tmp
@@ -14,20 +18,9 @@ RUN conda config --add channels defaults
 RUN conda config --add channels bioconda
 RUN conda config --add channels conda-forge
 
-RUN conda install bismark samtools trim_galore
-
-#Set to POSIX in the script currently being used...
-# ENV LC_ALL "POSIX"
-# ENV LANG "POSIX"
-
-#need to update samtools to later version and force install openssl 1.0 to keep libraries neat
-RUN conda install -c bioconda samtools openssl=1.0
-ENV PATH="${PATH}:/src/moabs/bin"
+RUN conda install bismark samtools trim-galore
 
 #custom scripts
 RUN mkdir /src
 COPY ../Docker/monitor_script.sh /src/
 RUN chmod +x /src/*
-
-RUN mkdir /workdir
-WORKDIR /workdir
