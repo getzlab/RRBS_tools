@@ -1,5 +1,6 @@
 from continuumio/miniconda3:4.8.2
-#author Binyamin Knisbacher (adapted from Andrew Dunford)
+#partially adapted from adunford
+MAINTAINER Binyamin A. Knisbacher
 
 #Install prerequisites: pigz
 RUN apt-get update -y
