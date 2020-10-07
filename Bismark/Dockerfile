@@ -22,5 +22,5 @@ RUN conda install bismark samtools trim-galore
 
 #custom scripts
 RUN mkdir /src
-COPY ../Docker/monitor_script.sh /src/
+COPY monitor_script.sh /src/
 RUN chmod +x /src/*
