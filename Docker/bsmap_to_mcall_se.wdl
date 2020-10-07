@@ -43,7 +43,7 @@ task fastqc{
     }
 }
 
-task bamstat {
+task bamstats {
     File bam_file
     File bam_index
     String prefix = basename(bam_file, ".bam")
@@ -384,10 +384,10 @@ workflow bsmap_to_mcall_PE {
     Int? bsmap_disk_size_buffer
     Int? bsmap_num_preempt
 
-    Int? bamstat_mem
-    Int? bamstat_threads
-    Int? bamstat_disk_size_buffer
-    Int? bamstat_num_preempt
+    Int? bamstats_mem
+    Int? bamstats_threads
+    Int? bamstats_disk_size_buffer
+    Int? bamstats_num_preempt
 
     Int? markdups_mem
     Int? markdups_threads
@@ -434,17 +434,6 @@ workflow bsmap_to_mcall_PE {
             num_preempt = select_first([bsmap_num_preempt, num_preempt])
     }
 
-    call bamstat as bamstat_bsmap{
-        input:
-            bam_file = bsmap.bam,
-            bam_index = bsmap.bam_index,
-            docker = docker,
-            mem = bamstat_mem,
-            threads = bamstat_threads,
-            disk_size_buffer = bamstat_disk_size_buffer,
-            num_preempt = select_first([bamstat_num_preempt, num_preempt])
-    }
-
     if(run_markduplicates==true){
         call markduplicates{
             input:
@@ -463,26 +452,26 @@ workflow bsmap_to_mcall_PE {
                 disk_size_buffer = markdups_disk_size_buffer,
                 num_preempt = select_first([markdups_num_preempt, num_preempt])
         }
-        call bamstat as bamstat_md{
-            input:
-                bam_file = markduplicates.bam_md,
-                bam_index = markduplicates.bam_md_index,
-                docker = docker,
-                mem = bamstat_mem,
-                threads = bamstat_threads,
-                disk_size_buffer = bamstat_disk_size_buffer,
-                num_preempt = select_first([bamstat_num_preempt, num_preempt])
-        }
     }
 
-File? markdup_bam = clip_overlap.bam_overlap_clipped
-File? markdup_bam_index = clip_overlap.bam_overlap_clipped_index
+File? markdup_bam = markduplicates.bam_md
+File? markdup_bam_index = markduplicates.bam_md_index
 
+    call bamstats{
+        input:
+            bam_file = select_first([markdup_bam, bsmap.bam]),
+            bam_index = select_first([markdup_bam_index, bsmap.bam_index]),
+            docker = docker,
+            mem = bamstats_mem,
+            threads = bamstats_threads,
+            disk_size_buffer = bamstats_disk_size_buffer,
+            num_preempt = select_first([bamstats_num_preempt, num_preempt])
+    }
 
     call mcall {
         input:
-            bam_file = select_first([markdup_bam, overlap_clipped_bam , bsmap.bam]),
-            bam_index = select_first([markdup_bam_index, overlap_clipped_bam_index , bsmap.bam_index]),
+            bam_file = select_first([markdup_bam, bsmap.bam]),
+            bam_index = select_first([markdup_bam_index, bsmap.bam_index]),
             sample_id = sample_id,
             reference_fa=reference_fa,
             reference_sizes=reference_sizes,
@@ -509,11 +498,6 @@ File? markdup_bam_index = clip_overlap.bam_overlap_clipped_index
             num_preempt = select_first([multiqc_num_preempt, num_preempt])
     }
 
-
-    File? bamstats_bsmap_file = bamstat_bsmap.bam_stats
-    File? bamstats_co_file = bamstat_co.bam_stats
-    File? bamstats_md_file = bamstat_md.bam_stats
-
     meta {
         author: "Binyamin A. Knisbacher"
         email: "bknisbac@broadinstitute.org"
@@ -524,7 +508,7 @@ File? markdup_bam_index = clip_overlap.bam_overlap_clipped_index
     output {
         #bsmap
         File bsmap_bam_final = select_first([markduplicates.bam_md, clip_overlap.bam_overlap_clipped, bsmap.bam])
-        Array[File] bsmap_align_stats = select_all([bamstats_bsmap_file, bamstats_co_file, bamstats_md_file])
+        File bsmap_align_stats = bamstats.bam_stats
         #multiqc
         File multiqc_report_html = multiqc.multiqc_report_html
         File multiqc_tar_gz = multiqc.multiqc_tar_gz
