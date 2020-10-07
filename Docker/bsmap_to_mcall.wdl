@@ -55,7 +55,7 @@ task trim_fastqs{
     String? trim_args=""
 
     #runtime inputs
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.1"
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bismark:0.1"
     Int? mem = "3"
     Int? threads = "2"
     Int? disk_size_buffer = "10"
@@ -414,6 +414,7 @@ workflow bsmap_to_mcall_PE {
 
     ### workflow-wide optional runtime variables
     String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.1"
+    String? docker_trim="gcr.io/broad-cga-bknisbac-wupo1/bismark:0.1"
     Int? num_preempt="4"
 
     #### Per tasks ####
@@ -494,7 +495,7 @@ if(run_trim==true){
             fastq1=fastq1,
             fastq2=fastq2,
             sample_id=sample_id,
-            docker = docker,
+            docker = select_first([docker_trim, docker]),
             mem = trim_fastqs_mem,
             threads = trim_fastqs_threads,
             disk_size_buffer = trim_fastqs_disk_size_buffer,
