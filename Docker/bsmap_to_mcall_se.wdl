@@ -91,8 +91,6 @@ task bsmap{
 
     String? bsmap_args="-q 20 -w 100 -S 1 -u -R '-D C-CGG'" #'-D C-CGG' Is for mspI-cut RRBS
 
-    String? sort_args = ""
-
     #runtime inputs
     String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.1"
     #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
@@ -103,7 +101,10 @@ task bsmap{
     Int? disk_size_gb = ceil( (size(fastq1, "G") ) * disk_scaler) + disk_size_buffer
     Int? num_preempt = "4"
 
-    Int? mem_mb_per_sort_thread = floor(950 * mem / threads) #would have done 1000 but don't want to risk choking machine
+    #sort args (here because some derived)
+    String? sort_args = ""
+    Int? mem_mb_scaling_factor = "950"
+    Int mem_mb_per_sort_thread = floor(mem_mb_scaling_factor * mem / threads) #would have done 1000 but don't want to risk choking machine
 
     command {
             /src/monitor_script.sh > monitoring.log &
@@ -354,8 +355,7 @@ workflow bsmap_to_mcall_PE {
     ## for bsmap
     Int? bsmap_seed_size
     String? bsmap_args
-    Int? bsmap_sort_threads
-    Int? bsmap_mem_mb_per_sort_thread
+    Int? bsmap_mem_mb_scaling_factor
     Int? bsmap_sort_args
 
     ## for markduplicates
@@ -424,9 +424,8 @@ workflow bsmap_to_mcall_PE {
             reference_fa=reference_fa,
             seed_size=bsmap_seed_size,
             bsmap_args=bsmap_args,
-            sort_threads=bsmap_sort_threads,
-            mem_mb_per_sort_thread=bsmap_mem_mb_per_sort_thread,
             sort_args=bsmap_sort_args,
+            mem_mb_scaling_factor=bsmap_mem_mb_scaling_factor,
             docker = docker,
             mem = bsmap_mem,
             threads = bsmap_threads,
@@ -507,7 +506,7 @@ File? markdup_bam_index = markduplicates.bam_md_index
 
     output {
         #bsmap
-        File bsmap_bam_final = select_first([markduplicates.bam_md, clip_overlap.bam_overlap_clipped, bsmap.bam])
+        File bsmap_bam_final = select_first([markduplicates.bam_md, bsmap.bam])
         File bsmap_align_stats = bamstats.bam_stats
         #multiqc
         File multiqc_report_html = multiqc.multiqc_report_html
