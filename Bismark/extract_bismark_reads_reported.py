@@ -1,7 +1,8 @@
 from bs4 import BeautifulSoup
+import sys
 
-#br_file = sys.argv[0]
-br_file = 'toy500K_bismark_report.html'
+br_file = sys.argv[1]
+#br_file = 'toy500K_bismark_report.html'
 
 br = BeautifulSoup(open(br_file),'html.parser')
 sequence_table = br.body.table.find_all('td')
