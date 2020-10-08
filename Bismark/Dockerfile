@@ -19,9 +19,11 @@ RUN conda config --add channels defaults
 RUN conda config --add channels bioconda
 RUN conda config --add channels conda-forge
 
-RUN conda install bismark samtools trim-galore
+RUN conda install bismark samtools trim-galore beautifulsoup4
 
 #custom scripts
 RUN mkdir /src
 COPY monitor_script.sh /src/
+COPY extract_bismark_reads_reported.py /src/
 RUN chmod +x /src/*
+
