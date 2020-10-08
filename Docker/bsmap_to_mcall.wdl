@@ -106,7 +106,7 @@ task bamstat {
 
     command {
             /src/monitor_script.sh > monitoring.log &
-            bamstats --bam ${bam_file} --threads $((${threads}-1)) --verbose | tee ${prefix}.stats.txt
+            bamstats --bam ${bam_file} --threads ${threads} --verbose > ${prefix}.stats.txt
 
             find . | xargs ls -l
         }
@@ -130,12 +130,13 @@ task bsmap{
     File reference_fa
     Int? seed_size="12" #default=12(RRBS mode), 16(WGBS mode). min=8, max=16.
     Int? max_insert_size="1000" # max insert size for PE mapping (-x)
-    # -q is quality threshold.  Here it's 20, default is 0, should we do 0 if preprocessing done?
+    # -q is quality threshold.
     # -w<int>   maximum number of equal best hits to count, <=1000
     # -S seed for rng.  0 for system clock (not reproducible) otherwise produces reproducible results.
     # -u   report unmapped reads, default=off
     # -R          print corresponding reference sequences in SAM output, default=off
-    String? bsmap_args="-q 20 -w 100 -S 1 -u -R '-D C-CGG'"
+    # -r  [0,1]   how to report repeat hits, 0=none(unique hit/pair only); 1=random one, default=1.
+    String? bsmap_args="-q 20 -w 100 -S 1 -u -R -D C-CGG"
 
     #runtime inputs
     String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.1"
@@ -169,7 +170,8 @@ task bsmap{
               -p ${threads} \
               -d ${reference_fa} \
               -a ${fastq1} \
-              -b ${fastq2} > $bam_file_unsorted
+              -b ${fastq2} \
+              -o $bam_file_unsorted > ${sample_id}.bsmap.stdout.log
 
             samtools sort ${sort_args} --threads ${threads} -m ${mem_mb_per_sort_thread}M --output-fmt BAM -o $bam_file $bam_file_unsorted
             rm $bam_file_unsorted
@@ -189,6 +191,7 @@ task bsmap{
     output {
         File bam = "${sample_id}.bsmap.srt.bam"
         File bam_index = "${sample_id}.bsmap.srt.bam.bai"
+        File stdout_log = "${sample_id}.bsmap.stdout.log"
     }
 }
 
@@ -297,7 +300,7 @@ task mcall {
         mv ${bam_file}.G.bed ${sample_id}.CpG.bed
 
         #Stats are not unique to CpG (would be the same for e.g. CpA analysis), hence naming CpX.stats
-        mv ${bam_file}_stat.txt ${sample_id}.CpX.stats.txt
+        mv ${bam_file}_stat.txt ${sample_id}.mcall.stats.txt
 
         ## convert BED to BigBED using bedToBigBed
         echo "Converting BED (${sample_id}.CpG.bed) to BigBed"
@@ -319,7 +322,8 @@ task mcall {
     output {
         File mcall_cpg_bed_gz = "${sample_id}.CpG.bed.gz"
         File mcall_cpg_bigbed = "${sample_id}.CpG.bb"
-        File mcall_stats = "${sample_id}.CpX.stats.txt"
+        File mcall_stats = "${sample_id}.mcall.stats.txt"
+        File mcall_log = "${sample_id}.mcall.stdout.log"
     }
 }
 
@@ -634,6 +638,7 @@ File? markdup_bam_index = markduplicates.bam_md_index
         #bsmap
         File bsmap_bam_final = select_first([markduplicates.bam_md, bsmap.bam])
         Array[File] bsmap_align_stats = select_all([bamstats_bsmap_file, bamstats_md_file])
+        File bsmap_stdout_log = bsmap.stdout_log
         #multiqc
         File multiqc_report_html = multiqc.multiqc_report_html
         File multiqc_tar_gz = multiqc.multiqc_tar_gz
