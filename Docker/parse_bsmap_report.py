@@ -37,7 +37,7 @@ def parse_bsmap_report(sample_id, report_file, out_tsv=None, regs=None, return_d
                 resdict[k] = [re.search(regs[k], l).group(1)]
 
     if(out_tsv != None):
-        pd.DataFrame.from_dict(resdict).to_csv(out_tsv, sep='\t')
+        pd.DataFrame.from_dict(resdict).to_csv(out_tsv, sep='\t', index=False)
 
     if return_dict:
         return(resdict)
