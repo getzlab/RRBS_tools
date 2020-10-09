@@ -1,0 +1,2 @@
+sample_id	paired_str	total_reads	aligned_reads	aligned_reads_pc	mapped_unique	mapped_unique_pc	mapped_non_unique	mapped_non_unique_pc
+mysample	Single-end	14972426	14045171	93.8	13274857	88.7	770314	5.1
