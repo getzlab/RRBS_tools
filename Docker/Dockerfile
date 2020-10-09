@@ -21,7 +21,8 @@ RUN conda config --add channels conda-forge
 
 #bsmap, gatk5, fastqc, multiqc and other stuff I haven't had a reason to install separately with conda
 #Specifying gatk 4.1.5 because sometime before 4.1.8 the syntax changes
-RUN conda install bsmap gatk4=4.1.5.0 fastqc multiqc bamutil cutadapt deeptools ucsc-bedtobigbed pandas
+RUN conda install bsmap gatk4=4.1.5.0 fastqc multiqc bamutil cutadapt deeptools ucsc-bedtobigbed
+RUN conda install pandas
 
 #mcall
 RUN conda install -c anaconda boost
