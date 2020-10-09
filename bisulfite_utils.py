@@ -21,6 +21,6 @@ def parse_bsmap_report(sample_id, report_file, out_tsv):
             if re.search(regs[k], l):
                 resdict[k] = re.search(regs[k], l).group(1)
 
-    out_fh = open(out_tsv, "w")
-    out_fh.close()
+    #out_fh = open(out_tsv, "w")
+    #out_fh.close()
     return(resdict)
