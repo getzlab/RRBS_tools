@@ -10,7 +10,7 @@ parser.add_option("-f", "--report_file", dest="report_file",
 parser.add_option("-o", "--outfile", dest="outfile",
                   help="output file (tsv format)")
 
-(options, args) = parser.parse_args()
+(opts, args) = parser.parse_args()
 
 
 def parse_bsmap_report(sample_id, report_file, out_tsv=None, regs=None, return_dict=False):
@@ -42,4 +42,4 @@ def parse_bsmap_report(sample_id, report_file, out_tsv=None, regs=None, return_d
         return(resdict)
 
 #Parse and write new output file
-parse_bsmap_report(args.sample_id, args.report_file, out_tsv=args.outfile)
+parse_bsmap_report(opts.sample_id, opts.report_file, out_tsv=opts.outfile)
