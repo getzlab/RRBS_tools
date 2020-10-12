@@ -5,11 +5,10 @@ task fastqc{
     String? fastq_suffix = '.fastq.gz'
     String? fastq1_prefix = basename(fastq1, '.fastq.gz')
 
-    #String? tar_gz_prefix="fastqc"
     String? fastqc_args = ""
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
     Int? threads = "1"
     Int? disk_size_buffer = "10"
@@ -28,7 +27,6 @@ task fastqc{
           ${fastqc_args} \
           ${fastq1}
 
-          find . | xargs ls -l
     }
     runtime {
         docker: "${docker}"
@@ -40,6 +38,7 @@ task fastqc{
     output {
         File fq1_zip="${fastq1_prefix}_fastqc.zip"
         File fq1_html="${fastq1_prefix}_fastqc.html"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -49,9 +48,9 @@ task bamstats {
     String prefix = basename(bam_file, ".bam")
 
     #runtime inputs
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
-    Int? threads = "1"
+    Int? threads = "4"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "1"
     Int? disk_size_gb = ceil( (size(bam_file, "G") + size(bam_index, "G")) * disk_scaler) + disk_size_buffer
@@ -59,9 +58,8 @@ task bamstats {
 
     command {
             /src/monitor_script.sh > monitoring.log &
-            bamstats --bam ${bam_file} --threads ${threads} --verbose > ${prefix}.stats.txt
+            /src/bamStat.pl --bam ${bam_file} --threads ${threads} --verbose > ${prefix}.stats.txt
 
-            find . | xargs ls -l
         }
 
     runtime {
@@ -73,6 +71,7 @@ task bamstats {
     }
     output {
         File bam_stats = "${prefix}.stats.txt"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -92,10 +91,10 @@ task bsmap{
     String? bsmap_args="-q 20 -w 100 -S 1 -u -R -D C-CGG" #'-D C-CGG' Is for mspI-cut RRBS
 
     #runtime inputs
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
-    Int? mem = "8"
-    Int? threads = "16"
+    Int? mem = "4" #"8"
+    Int? threads = "8" #"16"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "2"
     Int? disk_size_gb = ceil( (size(fastq1, "G") ) * disk_scaler) + disk_size_buffer
@@ -133,7 +132,6 @@ task bsmap{
             echo "Creating BAM Index for $bam_file"
             samtools index -@ ${threads} $bam_file
 
-            find . | xargs ls -l
  	    }
     runtime {
         docker: "${docker}"
@@ -146,6 +144,7 @@ task bsmap{
         File bam = "${sample_id}.bsmap.srt.bam"
         File bam_index = "${sample_id}.bsmap.srt.bam.bai"
         File stats_tsv = "${sample_id}.bsmap.stats.tsv"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -164,7 +163,7 @@ task markduplicates {
     String? other_args=""
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
     Int? threads = "1"
     Int? disk_size_buffer = "20"
@@ -201,7 +200,6 @@ task markduplicates {
 
         samtools index -@ ${threads} ${bam_prefix}.md.bam
 
-        find . | xargs ls -l
     }
 
     runtime {
@@ -215,6 +213,7 @@ task markduplicates {
         File bam_md="${bam_prefix}.md.bam"
         File bam_md_index="${bam_prefix}.md.bam.bai"
         File bam_md_metrics="${bam_prefix}.md-metrics.txt"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -231,9 +230,9 @@ task mcall {
     String? bam_prefix=basename(bam_file, ".bam")
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
-    Int? mem = "8"
-    Int? threads = "16"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
+    Int? mem = "3"
+    Int? threads = "12"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "2"
     Int? disk_size_gb = ceil( size(bam_file, "G") + size(bam_index, "G") * disk_scaler) + disk_size_buffer
@@ -262,7 +261,6 @@ task mcall {
 
         gzip ${sample_id}.CpG.bed
 
-        find . | xargs ls -l
     }
     runtime {
         docker: "${docker}"
@@ -275,6 +273,7 @@ task mcall {
         File mcall_cpg_bed_gz = "${sample_id}.CpG.bed.gz"
         File mcall_cpg_bigbed = "${sample_id}.CpG.bb"
         File mcall_stats = "${sample_id}.mcall.stats.txt"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -290,7 +289,7 @@ task multiqc {
     String? multiqc_args = ""
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
     Int? threads = "1"
     Int? disk_size_buffer = "10"
@@ -315,7 +314,6 @@ task multiqc {
         echo creating tar with:
         tar -czvf $multiqc_dir.tar.gz $multiqc_dir
 
-        find . | xargs ls -l
     }
 
     runtime {
@@ -328,6 +326,7 @@ task multiqc {
     output {
         File multiqc_report_html="${sample_id}.multiqc_report.html"
         File multiqc_tar_gz="${sample_id}.multiqc.tar.gz"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -341,7 +340,7 @@ workflow bsmap_to_mcall_SE {
     Boolean? run_markduplicates = true
 
     ### workflow-wide optional runtime variables
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? num_preempt="4"
 
     #### Per tasks ####
@@ -513,5 +512,7 @@ File? markdup_bam_index = markduplicates.bam_md_index
         File mcall_cpg_bed_gz = mcall.mcall_cpg_bed_gz
         File mcall_cpg_bigbed = mcall.mcall_cpg_bigbed
         File mcall_stats = mcall.mcall_stats
+
+        #Array[File] monitoring_logs = select_all([fastqc.monitoring_log, bamstats.monitoring_log, bsmap.monitoring_log, markduplicates.monitoring_log, mcall.monitoring_log, multiqc.monitoring_log])
     }
 }
