@@ -6,11 +6,10 @@ task fastqc{
     String? fastq1_prefix = basename(fastq1, '.fastq.gz')
     String? fastq2_prefix = basename(fastq2, fastq_suffix)
 
-    #String? tar_gz_prefix="fastqc"
     String? fastqc_args = ""
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
     Int? threads = "1"
     Int? disk_size_buffer = "10"
@@ -29,7 +28,6 @@ task fastqc{
           ${fastqc_args} \
           ${fastq1} ${fastq2}
 
-          find . | xargs ls -l
     }
     runtime {
         docker: "${docker}"
@@ -43,6 +41,7 @@ task fastqc{
         File fq2_zip="${fastq2_prefix}_fastqc.zip"
         File fq1_html="${fastq1_prefix}_fastqc.html"
         File fq2_html="${fastq2_prefix}_fastqc.html"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -53,11 +52,12 @@ task trim_fastqs{
     String sample_id #for log output
 
     String? trim_args=""
+    String? trim_cores_arg = "--cores 2" #--cores 2 actually uses 9 cores, 4 uses 15
 
     #runtime inputs
     String? docker="gcr.io/broad-cga-bknisbac-wupo1/bismark:0.1"
     Int? mem = "4"
-    Int? threads = "4"
+    Int? threads = "9"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "3" #trim_galore makes 2 copies
     Int? disk_size_gb = ceil( (size(fastq1, "G") + size(fastq2, "G")) * disk_scaler) + disk_size_buffer
@@ -66,14 +66,15 @@ task trim_fastqs{
     command {
         /src/monitor_script.sh > monitoring.log &
 
-        trim_galore --cores ${threads} --paired --gzip ${trim_args} ${fastq1} ${fastq2}
+        #cores in trim_galore is non-intuitive: --cores 2 uses 9 cores; --cores 4 would mean using 15 cores:
+        #4 (read) + 4 (write) + 4 (Cutadapt) + 2 (extra Cutadapt) + 1 (Trim Galore) = 15
+        #2 (read) + 2 (write) + 2 (Cutadapt) + 2 (extra Cutadapt) + 1 (Trim Galore) = 9
+        #See: https://github.com/FelixKrueger/TrimGalore/blob/master/Docs/Trim_Galore_User_Guide.md
+        trim_galore --paired --gzip ${trim_cores_arg} ${trim_args} ${fastq1} ${fastq2}
         mv *_val_1.*.gz ${sample_id}_1.trm.fastq.gz
         mv *_val_2.*.gz ${sample_id}_2.trm.fastq.gz
 
-        cat *1_trimming_report.txt *2_trimming_report.txt  > "${sample_id}.fastq.trimming.log"
-
-        echo printing ls -l of files
-        find . -type f | xargs ls -l #print files names to output
+        cat *_trimming_report.txt > "${sample_id}.fastq.trimming.log"
     }
 
     runtime {
@@ -87,6 +88,7 @@ task trim_fastqs{
 	    File fastq1_trimmed = "${sample_id}_1.trm.fastq.gz"
 	    File fastq2_trimmed = "${sample_id}_2.trm.fastq.gz"
         File trimming_log = "${sample_id}.fastq.trimming.log"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -96,9 +98,9 @@ task bamstat {
     String prefix = basename(bam_file, ".bam")
 
     #runtime inputs
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
-    Int? threads = "1"
+    Int? threads = "4"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "1"
     Int? disk_size_gb = ceil( (size(bam_file, "G") + size(bam_index, "G")) * disk_scaler) + disk_size_buffer
@@ -106,9 +108,8 @@ task bamstat {
 
     command {
             /src/monitor_script.sh > monitoring.log &
-            bamstats --bam ${bam_file} --threads ${threads} --verbose > ${prefix}.stats.txt
+            /src/bamStat.pl --bam ${bam_file} --threads ${threads} --verbose > ${prefix}.stats.txt
 
-            find . | xargs ls -l
         }
 
     runtime {
@@ -120,6 +121,7 @@ task bamstat {
     }
     output {
         File bam_stats = "${prefix}.stats.txt"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -136,10 +138,11 @@ task bsmap{
     # -u   report unmapped reads, default=off
     # -R          print corresponding reference sequences in SAM output, default=off
     # -r  [0,1]   how to report repeat hits, 0=none(unique hit/pair only); 1=random one, default=1.
-    String? bsmap_args="-q 20 -w 100 -S 1 -u -R -D C-CGG"
+    # -D C-CGG    Add if want to align specifically to mspI cut sites (consider for RRBS, not WGBS, and beware if trimming may discard the mspI cut site seq)
+    String? bsmap_args="-q 20 -w 100 -S 1 -u -R"
 
     #runtime inputs
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
     Int? mem = "10"
     Int? threads = "12"
@@ -181,7 +184,6 @@ task bsmap{
             echo "Creating BAM Index for $bam_file"
             samtools index -@ ${threads} $bam_file
 
-            find . | xargs ls -l
  	    }
     runtime {
         docker: "${docker}"
@@ -194,6 +196,7 @@ task bsmap{
         File bam = "${sample_id}.bsmap.srt.bam"
         File bam_index = "${sample_id}.bsmap.srt.bam.bai"
         File stats_tsv = "${sample_id}.bsmap.stats.tsv"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -212,7 +215,7 @@ task markduplicates {
     String? other_args=""
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
     Int? threads = "1"
     Int? disk_size_buffer = "20"
@@ -249,7 +252,6 @@ task markduplicates {
 
         samtools index -@ ${threads} ${bam_prefix}.md.bam
 
-        find . | xargs ls -l
     }
 
     runtime {
@@ -263,6 +265,7 @@ task markduplicates {
         File bam_md="${bam_prefix}.md.bam"
         File bam_md_index="${bam_prefix}.md.bam.bai"
         File bam_md_metrics="${bam_prefix}.md-metrics.txt"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -281,7 +284,7 @@ task mcall {
     String? bam_prefix=basename(bam_file, ".bam")
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "8"
     Int? threads = "16"
     Int? disk_size_buffer = "10"
@@ -312,7 +315,6 @@ task mcall {
 
         gzip ${sample_id}.CpG.bed
 
-        find . | xargs ls -l
     }
     runtime {
         docker: "${docker}"
@@ -325,7 +327,7 @@ task mcall {
         File mcall_cpg_bed_gz = "${sample_id}.CpG.bed.gz"
         File mcall_cpg_bigbed = "${sample_id}.CpG.bb"
         File mcall_stats = "${sample_id}.mcall.stats.txt"
-        File mcall_log = "${sample_id}.mcall.stdout.log"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -345,7 +347,7 @@ task multiqc {
     String? multiqc_args = ""
 
     #runtime inputs
-    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     Int? mem = "3"
     Int? threads = "1"
     Int? disk_size_buffer = "10"
@@ -383,7 +385,6 @@ task multiqc {
         echo creating tar with:
         tar -czvf $multiqc_dir.tar.gz $multiqc_dir
 
-        find . | xargs ls -l
     }
 
     runtime {
@@ -396,6 +397,7 @@ task multiqc {
     output {
         File multiqc_report_html="${sample_id}.multiqc_report.html"
         File multiqc_tar_gz="${sample_id}.multiqc.tar.gz"
+        File monitoring_log="monitoring.log"
     }
 }
 
@@ -411,7 +413,7 @@ workflow bsmap_to_mcall_PE {
     Boolean? run_markduplicates = true
 
     ### workflow-wide optional runtime variables
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.2"
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     String? docker_trim="gcr.io/broad-cga-bknisbac-wupo1/bismark:0.1"
     Int? num_preempt="4"
 
