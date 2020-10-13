@@ -53,8 +53,10 @@ ENV PATH="${PATH}:/src/moabs/bin"
 RUN ln -s /opt/conda/lib/libmysqlclient.so.20  /opt/conda/lib/libmysqlclient.so.18
 
 #custom scripts
+COPY bamStat.pl /src/bamstats
 COPY *.sh *.pl *.py /src/
 RUN chmod +x /src/*
+ENV PATH="${PATH}:/src"
 
 RUN mkdir /workdir
 WORKDIR /workdir
