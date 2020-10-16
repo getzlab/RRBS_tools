@@ -145,16 +145,11 @@ task bsmap{
     String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
     Int? mem = "10"
-    Int? threads = "12"
+    Int? threads = "24"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "2"
     Int? disk_size_gb = ceil( (size(fastq1, "G") + size(fastq2, "G")) * disk_scaler) + disk_size_buffer
     Int? num_preempt = "4"
-
-    #sort args (here because some derived)
-    String? sort_args = ""
-    Int? mem_mb_scaling_factor = "950"
-    Int mem_mb_per_sort_thread = floor(mem_mb_scaling_factor * mem / threads) #would have done 1000 but don't want to risk choking machine
 
     command {
             /src/monitor_script.sh > monitoring.log &
@@ -164,9 +159,6 @@ task bsmap{
             # -q =  quality threshold in trimming, 0-40, default=0 (no trim)
             # -w =  maximum number of equal best hits to count, <=1000
             # -S = 1 seed for random number generation used in selecting multiple hits, keep nonzero for reproucibility
-            bam_file_unsorted=${sample_id}.bsmap.unsorted.bam
-            bam_file=${sample_id}.bsmap.srt.bam
-
             bsmap \
               -v 0.1 -s ${seed_size} ${bsmap_args} \
               -x ${max_insert_size} \
@@ -174,14 +166,52 @@ task bsmap{
               -d ${reference_fa} \
               -a ${fastq1} \
               -b ${fastq2} \
-              -o $bam_file_unsorted 2> ${sample_id}.bsmap.stderr.log
+              -o ${sample_id}.bsmap.bam 2> ${sample_id}.bsmap.stderr.log
 
             /src/parse_bsmap_report.py -s ${sample_id} -f ${sample_id}.bsmap.stderr.log -o ${sample_id}.bsmap.stats.tsv
 
-            samtools sort ${sort_args} --threads ${threads} -m ${mem_mb_per_sort_thread}M --output-fmt BAM -o $bam_file $bam_file_unsorted
-            rm $bam_file_unsorted
+            echo START stderr from bsmap:
+            cat ${sample_id}.bsmap.stderr.log
+            echo END stderr from bsmap.
+ 	    }
+    runtime {
+        docker: "${docker}"
+        memory: "${mem}GB"
+        cpu: "${threads}"
+        disks: "local-disk ${disk_size_gb} HDD"
+        preemptible: "${num_preempt}"
+    }
+    output {
+        File bam = "${sample_id}.bsmap.bam"
+        File stats_tsv = "${sample_id}.bsmap.stats.tsv"
+        File monitoring_log="monitoring.log"
+    }
+}
 
-            echo "Creating BAM Index for $bam_file"
+task sort_bam {
+    File bam_file
+    String prefix = basename(bam_file, ".bam")
+
+    #runtime inputs
+    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
+    #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
+    Int? mem = "10"
+    Int? threads = "12"
+    Int? disk_size_buffer = "10"
+    Int? disk_scaler = "2"
+    Int? disk_size_gb = ceil( size(bam_file, "G") * disk_scaler) + disk_size_buffer
+    Int? num_preempt = "4"
+
+    #sort args (here because some derived)
+    String? sort_args = ""
+    Int? mem_mb_scaling_factor = "900"
+    Int mem_mb_per_sort_thread = floor(mem_mb_scaling_factor * mem / threads) #would have done 1000 but don't want to risk choking machine
+
+    command {
+            /src/monitor_script.sh > monitoring.log &
+
+            samtools sort ${sort_args} --threads ${threads} -m ${mem_mb_per_sort_thread}M --output-fmt BAM -o ${prefix}.srt.bam ${bam_file}
+
             samtools index -@ ${threads} $bam_file
 
  	    }
@@ -193,9 +223,8 @@ task bsmap{
         preemptible: "${num_preempt}"
     }
     output {
-        File bam = "${sample_id}.bsmap.srt.bam"
-        File bam_index = "${sample_id}.bsmap.srt.bam.bai"
-        File stats_tsv = "${sample_id}.bsmap.stats.tsv"
+        File bam = "${prefix}.srt.bam"
+        File bam_index = "${prefix}.srt.bam.bai"
         File monitoring_log="monitoring.log"
     }
 }
@@ -435,8 +464,10 @@ workflow bsmap_to_mcall_PE {
     Int? bsmap_seed_size
     Int? bsmap_max_insert_size
     String? bsmap_args
-    Int? bsmap_sort_args
-    Int? bsmap_mem_mb_scaling_factor
+
+    ## sort args
+    Int? sort_bam_args
+    Int? sort_bam_mem_mb_scaling_factor
 
     ## for markduplicates
     String? markdups_remove_dups #WARNING: "true" LEADS TO LOSS OF READS IN FINAL BAM
@@ -467,6 +498,11 @@ workflow bsmap_to_mcall_PE {
     Int? bsmap_threads
     Int? bsmap_disk_size_buffer
     Int? bsmap_num_preempt
+
+    Int? sort_bam_mem
+    Int? sort_bam_threads
+    Int? sort_bam_disk_size_buffer
+    Int? sort_bam_num_preempt
 
     Int? bamstat_mem
     Int? bamstat_threads
@@ -540,8 +576,6 @@ if(run_trim==true){
             seed_size=bsmap_seed_size,
             max_insert_size=bsmap_max_insert_size,
             bsmap_args=bsmap_args,
-            sort_args=bsmap_sort_args,
-            mem_mb_scaling_factor=bsmap_mem_mb_scaling_factor,
             docker = docker,
             mem = bsmap_mem,
             threads = bsmap_threads,
@@ -549,10 +583,21 @@ if(run_trim==true){
             num_preempt = select_first([bsmap_num_preempt, num_preempt])
     }
 
+    call sort_bam {
+        input:
+            bam_file=bsmap.bam,
+            sort_args=sort_bam_args,
+            mem_mb_scaling_factor=sort_bam_mem_mb_scaling_factor,
+            mem = sort_bam_mem,
+            threads = sort_bam_threads,
+            disk_size_buffer = sort_bam_disk_size_buffer,
+            num_preempt = sort_bam_num_preempt
+    }
+
     call bamstat as bamstat_bsmap{
         input:
-            bam_file = bsmap.bam,
-            bam_index = bsmap.bam_index,
+            bam_file = sort_bam.bam,
+            bam_index = sort_bam.bam_index,
             docker = docker,
             mem = bamstat_mem,
             threads = bamstat_threads,
@@ -563,8 +608,8 @@ if(run_trim==true){
     if(run_markduplicates==true){
         call markduplicates{
             input:
-                bam_file = bsmap.bam,
-                bam_index = bsmap.bam_index,
+                bam_file = sort_bam.bam,
+                bam_index = sort_bam.bam_index,
                 sample_id = sample_id,
                 remove_dups = markdups_remove_dups,
                 max_records_in_ram = markdups_max_records_in_ram,
@@ -595,8 +640,8 @@ File? markdup_bam_index = markduplicates.bam_md_index
 
     call mcall {
         input:
-            bam_file = select_first([markdup_bam, bsmap.bam]),
-            bam_index = select_first([markdup_bam_index, bsmap.bam_index]),
+            bam_file = select_first([markdup_bam, sort_bam.bam]),
+            bam_index = select_first([markdup_bam_index, sort_bam.bam_index]),
             sample_id = sample_id,
             reference_fa=reference_fa,
             reference_sizes=reference_sizes,
@@ -640,7 +685,8 @@ File? markdup_bam_index = markduplicates.bam_md_index
 
     output {
         #bsmap
-        File bsmap_bam_final = select_first([markduplicates.bam_md, bsmap.bam])
+        File bsmap_bam_final = select_first([markduplicates.bam_md, sort_bam.bam])
+        File bsmap_bam_final_index = select_first([markduplicates.bam_md_index, sort_bam.bam_index])
         Array[File] bsmap_align_stats = select_all([bamstats_bsmap_file, bamstats_md_file])
         File bsmap_stats_tsv = bsmap.stats_tsv
 
