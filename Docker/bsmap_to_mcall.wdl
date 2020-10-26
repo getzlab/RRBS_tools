@@ -212,7 +212,7 @@ task sort_bam {
 
             samtools sort ${sort_args} --threads ${threads} -m ${mem_mb_per_sort_thread}M --output-fmt BAM -o ${prefix}.srt.bam ${bam_file}
 
-            samtools index -@ ${threads} $bam_file
+            samtools index -@ ${threads} ${prefix}.srt.bam
 
  	    }
     runtime {
