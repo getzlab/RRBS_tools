@@ -19,7 +19,7 @@ RUN conda config --add channels defaults
 RUN conda config --add channels bioconda
 RUN conda config --add channels conda-forge
 
-RUN conda install bismark samtools trim-galore beautifulsoup4
+RUN conda install bismark samtools trim-galore beautifulsoup4 pandas
 
 #custom scripts
 RUN mkdir /src
