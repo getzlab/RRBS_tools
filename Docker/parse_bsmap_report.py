@@ -14,18 +14,22 @@ parser.add_option("-o", "--outfile", dest="outfile",
 (opts, args) = parser.parse_args()
 
 
-def parse_bsmap_report(sample_id, report_file, out_tsv=None, regs=None, return_dict=False):
+def parse_bsmap_report(sample_id, report_file, out_tsv=None, regs=None, return_dict=False, mode='SE'):
 
     resdict = {'sample_id':[sample_id]}
     if regs==None:
-        regs = {'paired_str':'\[bsmap\].*(Single-end|Paired-end) alignment',
-                    'total_reads':'\[bsmap\].*total reads: (\d+)',
-                    'aligned_reads':'aligned reads: (\d+\.?\d*) \(\d+\.?\d*%\)',
-                    'aligned_reads_pc':'aligned reads: \d+\.?\d* \((\d+\.?\d*)%\)',
-                    'mapped_unique':'unique reads: (\d+\.?\d*) \(\d+\.?\d*%\)',
-                    'mapped_unique_pc':'unique reads: \d+\.?\d* \((\d+\.?\d*)%\)',
-                    'mapped_non_unique':'non-unique reads: (\d+\.?\d*) \(\d+\.?\d*%\)',
-                    'mapped_non_unique_pc':'non-unique reads: \d+\.?\d* \((\d+\.?\d*)%\)'}
+        if mode=='SE':
+            regs = {'paired_str':'\[bsmap\].*(Single-end|Paired-end) alignment',
+                        'total_reads':'\[bsmap\].*total reads: (\d+)',
+                        'aligned_reads':'aligned reads: (\d+\.?\d*) \(\d+\.?\d*%\)',
+                        'aligned_reads_pc':'aligned reads: \d+\.?\d* \((\d+\.?\d*)%\)',
+                        'mapped_unique':'unique reads: (\d+\.?\d*) \(\d+\.?\d*%\)',
+                        'mapped_unique_pc':'unique reads: \d+\.?\d* \((\d+\.?\d*)%\)',
+                        'mapped_non_unique':'non-unique reads: (\d+\.?\d*) \(\d+\.?\d*%\)',
+                        'mapped_non_unique_pc':'non-unique reads: \d+\.?\d* \((\d+\.?\d*)%\)'}
+        else:
+            regs = {} #Need to add regex here for PE
+
 
     f = open(report_file, "r")
     lines = f.readlines()
