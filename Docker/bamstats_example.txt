@@ -1,0 +1,40 @@
+
+Input Statistics
+----------------
+
+  BAM File ......................: /cromwell_root/fc-f740c031-483e-46a5-9009-31bac5769ec0/ca2b31e9-e97f-4851-a432-06dcde5dede5/bsmap_to_mcall_PE/0086970e-b79e-4e01-8e71-090e2ee550f5/call-markduplicates/CRC-0001-T-01.bsmap.srt.md.bam
+  Number of Sequences analyzed ..:    29,551,706
+    Mapped Reads ................:    27,759,152 (93.9%)
+    Marked "Duplicated" .........:    22,981,953 (82.8%)
+    Mapped Read Pairs ...........:    13,345,500 (96.2%)
+    Unmapped Reads ..............:     1,792,554 (6.1%)
+  Average Read Length ...........:            77
+
+
+Alignment Statistics
+--------------------
+
+  (M) Aligned Bases .............: 2,149,680,788 (100.0%)
+  (S) Soft Clipped Bases ........:             0 (0.0%)
+  (I) Insertions ................:             0 (0.0%)
+  (D) Deletions .................:             0 (0.0%)
+  (N) Skipped Bases .............:             0 (0.0%)
+  (H) Hard Clipped Bases ........:             0 (0.0%)
+  (P) Padded Bases ..............:             0 (0.0%)
+  (=) Sequence Matches ..........:             0 (0.0%)
+  (X) Sequence Mismatch .........:             0 (0.0%)
+
+
+Clipping Statistics
+-------------------
+
+No 5' soft clipping applied.
+No 3' soft clipping applied.
+
+Processing Statistics
+---------------------
+
+  Alignment File Type ....: BAM
+  Processing Rate ........: 96,385 reads per second
+  Total Time .............: 4 min 48 sec
+
