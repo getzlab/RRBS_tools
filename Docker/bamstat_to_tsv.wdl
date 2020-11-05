@@ -1,6 +1,6 @@
 task bamstat_to_tsv {
     File bamstat_file
-    File sample_id
+    String sample_id
     String? seq_type = "PE"
     String? bamstat_args = ""
 
