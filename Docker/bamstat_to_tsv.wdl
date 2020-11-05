@@ -1,8 +1,6 @@
 task bamstat_to_tsv {
-    File? bamstat_file
-    Array[File]? bamstat_file_arr
+    File bamstat_file
     File sample_id
-    Int file_arr_index="0"
     String? seq_type = "PE"
     String? bamstat_args = ""
 
@@ -13,9 +11,8 @@ task bamstat_to_tsv {
     Int? disk_size_gb = "50"
     Int? num_preempt = "4"
 
-    File bamstat_file_final = select_first(bamstat_file, bamstat_file_arr[file_arr_index])
     command {
-            /src/parse_bamstats.py -f ${bamstat_file_final} -s ${sample_id} -o ${sample_id}.bamstat.tsv -t ${seq_type} ${bamstat_args}
+            /src/parse_bamstats.py -f ${bamstat_file} -s ${sample_id} -o ${sample_id}.bamstat.tsv -t ${seq_type} ${bamstat_args}
         }
 
     runtime {
