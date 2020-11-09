@@ -21,8 +21,8 @@ RUN conda config --add channels conda-forge
 
 #bsmap, gatk5, fastqc, multiqc and other stuff I haven't had a reason to install separately with conda
 #Specifying gatk 4.1.5 because sometime before 4.1.8 the syntax changes
-RUN conda install bsmap gatk4=4.1.5.0 fastqc  multiqc bamutil cutadapt deeptools  ucsc-bedtobigbed 
-
+RUN conda install bsmap gatk4=4.1.5.0 fastqc multiqc bamutil cutadapt deeptools ucsc-bedtobigbed
+RUN conda install pandas
 
 #mcall
 RUN conda install -c anaconda boost
@@ -35,13 +35,11 @@ RUN git clone https://github.com/sunnyisgalaxy/moabs.git
 #WORKDIR  moabs
 #RUN apt-get install make
 #RUN make
-#RUN make install 
+#RUN make install
 
 #Set to POSIX in the script currently being used...
 ENV LC_ALL "POSIX"
 ENV LANG "POSIX"
-
-
 
 #install needed perl modules
 RUN conda install -c bioconda perl-statistics-descriptive
@@ -55,8 +53,10 @@ ENV PATH="${PATH}:/src/moabs/bin"
 RUN ln -s /opt/conda/lib/libmysqlclient.so.20  /opt/conda/lib/libmysqlclient.so.18
 
 #custom scripts
-COPY WGBS_Workflow_01_PE_AD.sh *.sh *.pl /src/
+COPY bamStat.pl /src/bamstats
+COPY *.sh *.pl *.py /src/
 RUN chmod +x /src/*
+ENV PATH="${PATH}:/src"
 
 RUN mkdir /workdir
 WORKDIR /workdir

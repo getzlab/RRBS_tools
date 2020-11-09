@@ -1,10 +1,9 @@
+#Use in bsmap
 task fastqc{
     #inputs from workflow config, or upstream task if preprocessing done
     File fastq1
-    File fastq2
     String? fastq_suffix = '.fastq.gz'
     String? fastq1_prefix = basename(fastq1, '.fastq.gz')
-    String? fastq2_prefix = basename(fastq2, fastq_suffix)
 
     String? fastqc_args = ""
 
@@ -14,7 +13,7 @@ task fastqc{
     Int? threads = "1"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "1"
-    Int? disk_size_gb = ceil( (size(fastq1, "G") + size(fastq2, "G")) * disk_scaler) + disk_size_buffer
+    Int? disk_size_gb = ceil( (size(fastq1, "G")) * disk_scaler) + disk_size_buffer
     Int? num_preempt = "4"
 
     command {
@@ -26,7 +25,7 @@ task fastqc{
         --outdir . \
           --threads ${threads} \
           ${fastqc_args} \
-          ${fastq1} ${fastq2}
+          ${fastq1}
 
     }
     runtime {
@@ -38,61 +37,12 @@ task fastqc{
     }
     output {
         File fq1_zip="${fastq1_prefix}_fastqc.zip"
-        File fq2_zip="${fastq2_prefix}_fastqc.zip"
         File fq1_html="${fastq1_prefix}_fastqc.html"
-        File fq2_html="${fastq2_prefix}_fastqc.html"
         File monitoring_log="monitoring.log"
     }
 }
 
-task trim_fastqs{
-    #inputs from workflow config
-    File fastq1
-    File fastq2
-    String sample_id #for log output
-
-    String? trim_args=""
-    String? trim_cores_arg = "--cores 2" #--cores 2 actually uses 9 cores, 4 uses 15
-
-    #runtime inputs
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bismark:0.1"
-    Int? mem = "4"
-    Int? threads = "9"
-    Int? disk_size_buffer = "10"
-    Int? disk_scaler = "3" #trim_galore makes 2 copies
-    Int? disk_size_gb = ceil( (size(fastq1, "G") + size(fastq2, "G")) * disk_scaler) + disk_size_buffer
-    Int? num_preempt = "4"
-
-    command {
-        /src/monitor_script.sh > monitoring.log &
-
-        #cores in trim_galore is non-intuitive: --cores 2 uses 9 cores; --cores 4 would mean using 15 cores:
-        #4 (read) + 4 (write) + 4 (Cutadapt) + 2 (extra Cutadapt) + 1 (Trim Galore) = 15
-        #2 (read) + 2 (write) + 2 (Cutadapt) + 2 (extra Cutadapt) + 1 (Trim Galore) = 9
-        #See: https://github.com/FelixKrueger/TrimGalore/blob/master/Docs/Trim_Galore_User_Guide.md
-        trim_galore --paired --gzip ${trim_cores_arg} ${trim_args} ${fastq1} ${fastq2}
-        mv *_val_1.*.gz ${sample_id}_1.trm.fastq.gz
-        mv *_val_2.*.gz ${sample_id}_2.trm.fastq.gz
-
-        cat *_trimming_report.txt > "${sample_id}.fastq.trimming.log"
-    }
-
-    runtime {
-    	    docker: "${docker}"
-    	    memory: "${mem}GB"
-            cpu: "${threads}"
-    	    disks: "local-disk ${disk_size_gb} HDD"
-    	    preemptible: "${num_preempt}"
-    }
-    output {
-	    File fastq1_trimmed = "${sample_id}_1.trm.fastq.gz"
-	    File fastq2_trimmed = "${sample_id}_2.trm.fastq.gz"
-        File trimming_log = "${sample_id}.fastq.trimming.log"
-        File monitoring_log="monitoring.log"
-    }
-}
-
-task bamstat {
+task bamstats {
     File bam_file
     File bam_index
     String prefix = basename(bam_file, ".bam")
@@ -127,52 +77,61 @@ task bamstat {
 
 task bsmap{
     File fastq1
-    File fastq2
     String sample_id
     File reference_fa
     Int? seed_size="12" #default=12(RRBS mode), 16(WGBS mode). min=8, max=16.
-    Int? max_insert_size="1000" # max insert size for PE mapping (-x)
-    # -q is quality threshold.
+    # -q is quality threshold.  Here it's 20, default is 0, should we do 0 if preprocessing done?
     # -w<int>   maximum number of equal best hits to count, <=1000
     # -S seed for rng.  0 for system clock (not reproducible) otherwise produces reproducible results.
     # -u   report unmapped reads, default=off
     # -R          print corresponding reference sequences in SAM output, default=off
-    # -r  [0,1]   how to report repeat hits, 0=none(unique hit/pair only); 1=random one, default=1.
-    # -D C-CGG    Add if want to align specifically to mspI cut sites (consider for RRBS, not WGBS, and beware if trimming may discard the mspI cut site seq)
-    String? bsmap_args="-q 20 -w 100 -S 1 -u -R"
+    # -n strands to map (-n 0 is default and only maps forward only)
+    # -D specifies
+
+    String? bsmap_args="-q 20 -w 100 -S 1 -u -R -D C-CGG" #'-D C-CGG' Is for mspI-cut RRBS
 
     #runtime inputs
     String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
     #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
-    Int? mem = "10"
-    Int? threads = "24"
+    Int? mem = "4" #"8"
+    Int? threads = "8" #"16"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "2"
-    Int? disk_size_gb = ceil( (size(fastq1, "G") + size(fastq2, "G")) * disk_scaler) + disk_size_buffer
+    Int? disk_size_gb = ceil( (size(fastq1, "G") ) * disk_scaler) + disk_size_buffer
     Int? num_preempt = "4"
+
+    #sort args (here because some derived)
+    String? sort_args = ""
+    Int? mem_mb_scaling_factor = "950"
+    Int mem_mb_per_sort_thread = floor(mem_mb_scaling_factor * mem / threads) #would have done 1000 but don't want to risk choking machine
 
     command {
             /src/monitor_script.sh > monitoring.log &
+
             # -s = seed size, default=12(RRBS mode), 16(WGBS mode). min=8, max=16
             # -u = report unmapped reads, default=off
             # -R = print corresponding reference sequences in SAM output, default=off
             # -q =  quality threshold in trimming, 0-40, default=0 (no trim)
             # -w =  maximum number of equal best hits to count, <=1000
             # -S = 1 seed for random number generation used in selecting multiple hits, keep nonzero for reproucibility
+            bam_file_unsorted=${sample_id}.bsmap.unsorted.bam
+            bam_file=${sample_id}.bsmap.srt.bam
+
             bsmap \
               -v 0.1 -s ${seed_size} ${bsmap_args} \
-              -x ${max_insert_size} \
               -p ${threads} \
               -d ${reference_fa} \
               -a ${fastq1} \
-              -b ${fastq2} \
-              -o ${sample_id}.bsmap.bam 2> ${sample_id}.bsmap.stderr.log
+              -o $bam_file_unsorted 2> ${sample_id}.bsmap.stderr.log
 
             /src/parse_bsmap_report.py -s ${sample_id} -f ${sample_id}.bsmap.stderr.log -o ${sample_id}.bsmap.stats.tsv
 
-            echo START stderr from bsmap:
-            cat ${sample_id}.bsmap.stderr.log
-            echo END stderr from bsmap.
+            samtools sort ${sort_args} --threads ${threads} -m ${mem_mb_per_sort_thread}M --output-fmt BAM -o $bam_file $bam_file_unsorted
+            rm $bam_file_unsorted
+
+            echo "Creating BAM Index for $bam_file"
+            samtools index -@ ${threads} $bam_file
+
  	    }
     runtime {
         docker: "${docker}"
@@ -182,49 +141,9 @@ task bsmap{
         preemptible: "${num_preempt}"
     }
     output {
-        File bam = "${sample_id}.bsmap.bam"
+        File bam = "${sample_id}.bsmap.srt.bam"
+        File bam_index = "${sample_id}.bsmap.srt.bam.bai"
         File stats_tsv = "${sample_id}.bsmap.stats.tsv"
-        File monitoring_log="monitoring.log"
-    }
-}
-
-task sort_bam {
-    File bam_file
-    String prefix = basename(bam_file, ".bam")
-
-    #runtime inputs
-    String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
-    #mem=10, threads=12 is sufficient for "samtools sort" default mem/thread usage [768 MiB]
-    Int? mem = "10"
-    Int? threads = "12"
-    Int? disk_size_buffer = "10"
-    Int? disk_scaler = "2"
-    Int? disk_size_gb = ceil( size(bam_file, "G") * disk_scaler) + disk_size_buffer
-    Int? num_preempt = "4"
-
-    #sort args (here because some derived)
-    String? sort_args = ""
-    Int? mem_mb_scaling_factor = "900"
-    Int mem_mb_per_sort_thread = floor(mem_mb_scaling_factor * mem / threads) #would have done 1000 but don't want to risk choking machine
-
-    command {
-            /src/monitor_script.sh > monitoring.log &
-
-            samtools sort ${sort_args} --threads ${threads} -m ${mem_mb_per_sort_thread}M --output-fmt BAM -o ${prefix}.srt.bam ${bam_file}
-
-            samtools index -@ ${threads} ${prefix}.srt.bam
-
- 	    }
-    runtime {
-        docker: "${docker}"
-        memory: "${mem}GB"
-        cpu: "${threads}"
-        disks: "local-disk ${disk_size_gb} HDD"
-        preemptible: "${num_preempt}"
-    }
-    output {
-        File bam = "${prefix}.srt.bam"
-        File bam_index = "${prefix}.srt.bam.bai"
         File monitoring_log="monitoring.log"
     }
 }
@@ -305,17 +224,15 @@ task mcall {
     File reference_fa
     File reference_sizes
 
-    #No trimming: --trimRRBSEndRepairSeq 0
-    #For RRBS/WGBS (automatically detected): --trimRRBSEndRepairSeq 2
-    #-F 256 for primary alignments only
+    #-F 256 for primary alignments mapped reads only
     String? mcall_args="-F 256"
 
     String? bam_prefix=basename(bam_file, ".bam")
 
     #runtime inputs
     String? docker = "gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
-    Int? mem = "8"
-    Int? threads = "16"
+    Int? mem = "3"
+    Int? threads = "12"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "2"
     Int? disk_size_gb = ceil( size(bam_file, "G") + size(bam_index, "G") * disk_scaler) + disk_size_buffer
@@ -368,10 +285,6 @@ task mcall {
 task multiqc {
     String sample_id
     File fastq1_fastqc
-    File fastq2_fastqc
-    File? fastq1_trimmed_fastqc
-    File? fastq2_trimmed_fastqc
-    File? trimming_log
     File? bam_markdups_report
     String? multiqc_args = ""
 
@@ -381,7 +294,7 @@ task multiqc {
     Int? threads = "1"
     Int? disk_size_buffer = "10"
     Int? disk_scaler = "1"
-    Int? disk_size_gb = ceil( (size(fastq1_fastqc, "G") + size(fastq2_fastqc, "G") + size(fastq1_trimmed_fastqc, "G") + size(fastq2_trimmed_fastqc, "G")) * disk_scaler) + disk_size_buffer
+    Int? disk_size_gb = ceil( (size(fastq1_fastqc, "G") ) * disk_scaler) + disk_size_buffer
     Int? num_preempt = "4"
 
     command {
@@ -391,19 +304,6 @@ task multiqc {
         mkdir $multiqc_dir
 
         mv ${fastq1_fastqc} $multiqc_dir/
-        mv ${fastq2_fastqc} $multiqc_dir/
-
-        if [ -n "${trimming_log}" ]; then
-            mv ${trimming_log} $multiqc_dir/
-        fi
-
-        if [ -n "${fastq1_trimmed_fastqc}" ]; then
-            mv ${fastq1_trimmed_fastqc} $multiqc_dir/
-        fi
-
-        if [ -n "${fastq2_trimmed_fastqc}" ]; then
-            mv ${fastq2_trimmed_fastqc} $multiqc_dir/
-        fi
 
         if [ -n "${bam_markdups_report}" ]; then
             mv ${bam_markdups_report} $multiqc_dir/
@@ -430,44 +330,29 @@ task multiqc {
     }
 }
 
-workflow bsmap_to_mcall_PE {
+workflow bsmap_to_mcall_SE {
     String sample_id
     File fastq1
-    File fastq2
     File reference_fa #for bsmap, mcall
     File reference_sizes #for bsmap, mcall
 
     ## Control variables
-    Boolean? run_trim = true
     Boolean? run_markduplicates = true
 
     ### workflow-wide optional runtime variables
     String? docker="gcr.io/broad-cga-bknisbac-wupo1/bisulfite_tools:0.3"
-    String? docker_trim="gcr.io/broad-cga-bknisbac-wupo1/bismark:0.1"
     Int? num_preempt="4"
 
     #### Per tasks ####
     ## for fastqc
     String? fastq_suffix
     String? fastqc_args_raw
-    String? fastqc_args_trimmed
-
-    ## for trim_fastqs
-    String? trim_fastqs_fastq_suffix
-    String? trim_fastqs_adaptors
-    Int? trim_fastqs_min_length
-    Int? trim_fastqs_min_qual
-    Int? trim_fastqs_swift_trim_off
-    String? trim_fastqs_trimming_type
 
     ## for bsmap
     Int? bsmap_seed_size
-    Int? bsmap_max_insert_size
     String? bsmap_args
-
-    ## sort args
-    Int? sort_bam_args
-    Int? sort_bam_mem_mb_scaling_factor
+    Int? bsmap_mem_mb_scaling_factor
+    Int? bsmap_sort_args
 
     ## for markduplicates
     String? markdups_remove_dups #WARNING: "true" LEADS TO LOSS OF READS IN FINAL BAM
@@ -484,10 +369,6 @@ workflow bsmap_to_mcall_PE {
     String? multiqc_args
 
     ### Per-task optional runtime variables
-    Int? trim_fastqs_mem
-    Int? trim_fastqs_threads
-    Int? trim_fastqs_disk_size_buffer
-    Int? trim_fastqs_num_preempt
 
     Int? fastqc_mem
     Int? fastqc_threads
@@ -499,15 +380,10 @@ workflow bsmap_to_mcall_PE {
     Int? bsmap_disk_size_buffer
     Int? bsmap_num_preempt
 
-    Int? sort_bam_mem
-    Int? sort_bam_threads
-    Int? sort_bam_disk_size_buffer
-    Int? sort_bam_num_preempt
-
-    Int? bamstat_mem
-    Int? bamstat_threads
-    Int? bamstat_disk_size_buffer
-    Int? bamstat_num_preempt
+    Int? bamstats_mem
+    Int? bamstats_threads
+    Int? bamstats_disk_size_buffer
+    Int? bamstats_num_preempt
 
     Int? markdups_mem
     Int? markdups_threads
@@ -525,25 +401,9 @@ workflow bsmap_to_mcall_PE {
     Int? multiqc_num_preempt
 
 
-if(run_trim==true){
-    call trim_fastqs {
-        input:
-            fastq1=fastq1,
-            fastq2=fastq2,
-            sample_id=sample_id,
-            docker = select_first([docker_trim, docker]),
-            mem = trim_fastqs_mem,
-            threads = trim_fastqs_threads,
-            disk_size_buffer = trim_fastqs_disk_size_buffer,
-            num_preempt = select_first([trim_fastqs_num_preempt, num_preempt])
-    }
-}
-
-
     call fastqc as fastqc_raw {
         input:
             fastq1 = fastq1,
-            fastq2 = fastq2,
             fastq_suffix = fastq_suffix,
             fastqc_args = fastqc_args_raw,
             docker = docker,
@@ -553,29 +413,15 @@ if(run_trim==true){
             num_preempt = select_first([fastqc_num_preempt, num_preempt])
     }
 
-    call fastqc as fastqc_trimmed {
-        input:
-            fastq1 = trim_fastqs.fastq1_trimmed,
-            fastq2 = trim_fastqs.fastq2_trimmed,
-            docker = docker,
-            mem = fastqc_mem,
-            threads = fastqc_threads,
-            disk_size_buffer = fastqc_disk_size_buffer,
-            num_preempt = select_first([fastqc_num_preempt, num_preempt])
-    }
-
-    File? trimmed_fastq1 = trim_fastqs.fastq1_trimmed
-    File? trimmed_fastq2 = trim_fastqs.fastq2_trimmed
-
     call bsmap{
         input:
-            fastq1=select_first([trimmed_fastq1, fastq1]),
-            fastq2=select_first([trimmed_fastq2, fastq2]),
+            fastq1=fastq1,
             sample_id=sample_id,
             reference_fa=reference_fa,
             seed_size=bsmap_seed_size,
-            max_insert_size=bsmap_max_insert_size,
             bsmap_args=bsmap_args,
+            sort_args=bsmap_sort_args,
+            mem_mb_scaling_factor=bsmap_mem_mb_scaling_factor,
             docker = docker,
             mem = bsmap_mem,
             threads = bsmap_threads,
@@ -583,33 +429,11 @@ if(run_trim==true){
             num_preempt = select_first([bsmap_num_preempt, num_preempt])
     }
 
-    call sort_bam {
-        input:
-            bam_file=bsmap.bam,
-            sort_args=sort_bam_args,
-            mem_mb_scaling_factor=sort_bam_mem_mb_scaling_factor,
-            mem = sort_bam_mem,
-            threads = sort_bam_threads,
-            disk_size_buffer = sort_bam_disk_size_buffer,
-            num_preempt = sort_bam_num_preempt
-    }
-
-    call bamstat as bamstat_bsmap{
-        input:
-            bam_file = sort_bam.bam,
-            bam_index = sort_bam.bam_index,
-            docker = docker,
-            mem = bamstat_mem,
-            threads = bamstat_threads,
-            disk_size_buffer = bamstat_disk_size_buffer,
-            num_preempt = select_first([bamstat_num_preempt, num_preempt])
-    }
-
     if(run_markduplicates==true){
         call markduplicates{
             input:
-                bam_file = sort_bam.bam,
-                bam_index = sort_bam.bam_index,
+                bam_file = bsmap.bam,
+                bam_index = bsmap.bam_index,
                 sample_id = sample_id,
                 remove_dups = markdups_remove_dups,
                 max_records_in_ram = markdups_max_records_in_ram,
@@ -623,25 +447,26 @@ if(run_trim==true){
                 disk_size_buffer = markdups_disk_size_buffer,
                 num_preempt = select_first([markdups_num_preempt, num_preempt])
         }
-        call bamstat as bamstat_md{
-            input:
-                bam_file = markduplicates.bam_md,
-                bam_index = markduplicates.bam_md_index,
-                docker = docker,
-                mem = bamstat_mem,
-                threads = bamstat_threads,
-                disk_size_buffer = bamstat_disk_size_buffer,
-                num_preempt = select_first([bamstat_num_preempt, num_preempt])
-        }
     }
 
 File? markdup_bam = markduplicates.bam_md
 File? markdup_bam_index = markduplicates.bam_md_index
 
+    call bamstats{
+        input:
+            bam_file = select_first([markdup_bam, bsmap.bam]),
+            bam_index = select_first([markdup_bam_index, bsmap.bam_index]),
+            docker = docker,
+            mem = bamstats_mem,
+            threads = bamstats_threads,
+            disk_size_buffer = bamstats_disk_size_buffer,
+            num_preempt = select_first([bamstats_num_preempt, num_preempt])
+    }
+
     call mcall {
         input:
-            bam_file = select_first([markdup_bam, sort_bam.bam]),
-            bam_index = select_first([markdup_bam_index, sort_bam.bam_index]),
+            bam_file = select_first([markdup_bam, bsmap.bam]),
+            bam_index = select_first([markdup_bam_index, bsmap.bam_index]),
             sample_id = sample_id,
             reference_fa=reference_fa,
             reference_sizes=reference_sizes,
@@ -659,10 +484,6 @@ File? markdup_bam_index = markduplicates.bam_md_index
         input:
             sample_id = sample_id,
             fastq1_fastqc = fastqc_raw.fq1_zip,
-            fastq2_fastqc = fastqc_raw.fq2_zip,
-            fastq1_trimmed_fastqc = trim_fastqs.fastq1_trimmed,
-            fastq2_trimmed_fastqc = trim_fastqs.fastq2_trimmed,
-            trimming_log = trim_fastqs.trimming_log,
             bam_markdups_report = markduplicates.bam_md_metrics,
             multiqc_args = multiqc_args,
             docker = docker,
@@ -671,10 +492,6 @@ File? markdup_bam_index = markduplicates.bam_md_index
             disk_size_buffer = multiqc_disk_size_buffer,
             num_preempt = select_first([multiqc_num_preempt, num_preempt])
     }
-
-
-    File? bamstats_bsmap_file = bamstat_bsmap.bam_stats
-    File? bamstats_md_file = bamstat_md.bam_stats
 
     meta {
         author: "Binyamin A. Knisbacher"
@@ -685,11 +502,9 @@ File? markdup_bam_index = markduplicates.bam_md_index
 
     output {
         #bsmap
-        File bsmap_bam_final = select_first([markduplicates.bam_md, sort_bam.bam])
-        File bsmap_bam_final_index = select_first([markduplicates.bam_md_index, sort_bam.bam_index])
-        Array[File] bsmap_align_stats = select_all([bamstats_bsmap_file, bamstats_md_file])
+        File bsmap_bam_final = select_first([markduplicates.bam_md, bsmap.bam])
+        File bsmap_align_stats = bamstats.bam_stats
         File bsmap_stats_tsv = bsmap.stats_tsv
-
         #multiqc
         File multiqc_report_html = multiqc.multiqc_report_html
         File multiqc_tar_gz = multiqc.multiqc_tar_gz
@@ -697,5 +512,7 @@ File? markdup_bam_index = markduplicates.bam_md_index
         File mcall_cpg_bed_gz = mcall.mcall_cpg_bed_gz
         File mcall_cpg_bigbed = mcall.mcall_cpg_bigbed
         File mcall_stats = mcall.mcall_stats
+
+        #Array[File] monitoring_logs = select_all([fastqc.monitoring_log, bamstats.monitoring_log, bsmap.monitoring_log, markduplicates.monitoring_log, mcall.monitoring_log, multiqc.monitoring_log])
     }
 }

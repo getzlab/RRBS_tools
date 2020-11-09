@@ -1,0 +1,11 @@
+[bsmap] @Thu Oct 15 15:35:52 2020 	loading reference file: /cromwell_root/fc-201acbf6-9758-4cf9-97fe-140fa01bd195/hg19.fa 	(format: FASTA)
+[bsmap] @Thu Oct 15 15:36:28 2020 	93 reference seqs loaded, total size 3137161264 bp. 36 secs passed
+[bsmap] @Thu Oct 15 15:37:22 2020 	create seed table. 90 secs passed
+[bsmap] @Thu Oct 15 15:37:22 2020 	Pair-end alignment(12 threads),
+	Input read file #1: /cromwell_root/fc-f740c031-483e-46a5-9009-31bac5769ec0/bc27b052-79c6-4335-ad01-dc98b36725f0/bsmap_to_mcall_PE/489d3fdc-1cc7-4011-8029-29602cc90f3a/call-trim_fastqs/cacheCopy/toy500KreadsPE_1.trm.fastq.gz 	(format: gzipped FASTQ)
+	Input read file #2: /cromwell_root/fc-f740c031-483e-46a5-9009-31bac5769ec0/bc27b052-79c6-4335-ad01-dc98b36725f0/bsmap_to_mcall_PE/489d3fdc-1cc7-4011-8029-29602cc90f3a/call-trim_fastqs/cacheCopy/toy500KreadsPE_2.trm.fastq.gz 	(format: gzipped FASTQ)
+	Output file: toy500KreadsPE.bsmap.unsorted.bam	 (format: SAM, automatically convert to BAM)
+[bsmap] @Thu Oct 15 15:37:31 2020 	total read pairs: 5000 	total time consumed:  99 secs
+	aligned pairs: 2764 (55.3%), unique pairs: 2764 (55.3%), suppressed non-unique pairs: 2205 (44.1%)
+	unpaired read #1: 24 (0.5%), unique reads: 24 (0.5%), suppressed non-unique reads: 2212 (44.2%)
+	unpaired read #2: 27 (0.5%), unique reads: 27 (0.5%), suppressed non-unique reads: 2209 (44.2%)

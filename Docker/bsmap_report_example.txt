@@ -1,0 +1,5 @@
+[bsmap] @Thu Oct  8 23:10:50 2020 	Single-end alignment(16 threads),
+	Input read file: /cromwell_root/fc-f740c031-483e-46a5-9009-31bac5769ec0/e9c2aa5a-3a00-4177-8bf5-b21c18aaf599/samtofastq_workflow/d699ace3-6dcf-4970-bb47-434336ec7b7d/call-samtofastq/CRC-0001-T-01_1.fastq.gz 	(format: gzipped FASTQ)
+	Output file: CRC-0001-T-01.bsmap.unsorted.bam	 (format: SAM, automatically convert to BAM)
+[bsmap] @Thu Oct  8 23:16:22 2020 	total reads: 14972426 	total time:  657 secs
+	aligned reads: 14045171 (93.8%), unique reads: 13274857 (88.7%), non-unique reads: 770314 (5.1%)
